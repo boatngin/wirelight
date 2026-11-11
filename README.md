@@ -16,7 +16,12 @@
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-black">
 </p>
 
-<p align="center"><a href="README.th.md">อ่านภาษาไทย</a></p>
+<p align="center">
+  <a href="https://github.com/boatngin/wirelight/releases/latest/download/Wirelight.pkg"><b>Download for macOS</b></a> ·
+  <a href="https://boatngin.github.io/wirelight/">Website</a> ·
+  <a href="https://github.com/boatngin/wirelight/discussions">Discussions</a> ·
+  <a href="README.th.md">ภาษาไทย</a>
+</p>
 
 ---
 
@@ -144,6 +149,18 @@ Wirelight.app (SwiftUI menu bar)  ──JSON over Unix socket──▶  wgbar-he
 
 Wirelight uses a small root helper instead of a Network Extension, so it runs without a paid Apple Developer Program membership.
 
+## Roadmap
+
+Planned work lives in [issues](https://github.com/boatngin/wirelight/issues). Highlights:
+
+- [ ] [Kill switch](https://github.com/boatngin/wirelight/issues/4)
+- [ ] [On-demand rules by Wi-Fi network](https://github.com/boatngin/wirelight/issues/5)
+- [ ] [Homebrew cask](https://github.com/boatngin/wirelight/issues/10)
+- [ ] [Notarized releases](https://github.com/boatngin/wirelight/issues/11)
+- [ ] [Global hotkey](https://github.com/boatngin/wirelight/issues/8)
+
+Got an idea? Share it in [Discussions › Ideas](https://github.com/boatngin/wirelight/discussions/categories/ideas).
+
 ## Development
 
 ### Requirements
@@ -203,6 +220,17 @@ swift scripts/make-icons.swift .
 ### Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md). Issues labelled [good first issue](https://github.com/boatngin/wirelight/labels/good%20first%20issue) are a great place to start.
+
+## Support the project
+
+If Wirelight is useful to you:
+
+- ⭐ Star the repo so more people can find it
+- 🗣️ Tell a friend, or share it on your favourite Mac or homelab community
+- 🐛 Report bugs and 💡 suggest features
+- 🛠️ Pick up a [good first issue](https://github.com/boatngin/wirelight/labels/good%20first%20issue)
+
+<a href="https://star-history.com/#boatngin/wirelight&Date"><img src="https://api.star-history.com/svg?repos=boatngin/wirelight&type=Date" alt="Star history" width="480"></a>
 
 ## License
 
