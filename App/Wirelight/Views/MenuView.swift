@@ -54,7 +54,7 @@ struct MenuView: View {
             PingBadge(color: accent, animating: connected || store.busy, fast: store.busy)
                 .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 3) {
-                Text(store.active?.name ?? store.currentProfile?.name ?? "WGTail")
+                Text(store.active?.name ?? store.currentProfile?.name ?? "Wirelight")
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                 HStack(spacing: 5) {

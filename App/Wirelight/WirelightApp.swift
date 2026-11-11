@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct WGTailApp: App {
+struct WirelightApp: App {
     @StateObject private var store = TunnelStore()
 
     var body: some Scene {
@@ -13,7 +13,7 @@ struct WGTailApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("WGTail", id: "main") {
+        Window("Wirelight", id: "main") {
             MainWindow()
                 .environmentObject(store)
         }

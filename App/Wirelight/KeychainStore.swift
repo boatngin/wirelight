@@ -28,7 +28,7 @@ enum KeychainStore {
         guard update == errSecItemNotFound else { throw KeychainError.status(update) }
         var add = baseQuery(account)
         add[kSecValueData as String] = data
-        add[kSecAttrLabel as String] = "WGTail tunnel \(account)"
+        add[kSecAttrLabel as String] = "Wirelight tunnel \(account)"
         add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
         let status = SecItemAdd(add as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError.status(status) }

@@ -1,4 +1,4 @@
-name: WGTail
+name: Wirelight
 options:
   bundleIdPrefix: com.thanaboat
   deploymentTarget:
@@ -7,18 +7,18 @@ packages:
   WGCore:
     path: ..
 targets:
-  WGTail:
+  Wirelight:
     type: application
     platform: macOS
-    sources: [WGTail]
+    sources: [Wirelight]
     dependencies:
       - package: WGCore
         product: WGCore
     info:
-      path: WGTail/Info.plist
+      path: Wirelight/Info.plist
       properties:
         LSUIElement: true
-        CFBundleDisplayName: WGTail
+        CFBundleDisplayName: Wirelight
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.utilities
