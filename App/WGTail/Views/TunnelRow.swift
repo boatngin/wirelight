@@ -14,9 +14,9 @@ struct TunnelRow: View {
                 .fill(isActive ? Color.green : Color.secondary.opacity(0.4))
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
-                Text(profile.name).font(.system(size: 13, weight: .medium))
+                Text(profile.name).font(.system(size: 12, weight: .medium))
                 Text(profile.endpoint ?? "no endpoint")
-                    .font(.system(size: 11))
+                    .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -30,7 +30,7 @@ struct TunnelRow: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? Color.primary.opacity(0.07) : .clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
