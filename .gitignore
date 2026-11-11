@@ -1,0 +1,14 @@
+# WireGuard configs / keys — never commit
+*.conf
+*.key
+
+# SwiftPM / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+App/WGBar.xcodeproj/
+build/
+
+.DS_Store
