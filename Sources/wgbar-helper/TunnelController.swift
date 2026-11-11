@@ -1,4 +1,239 @@
 import Foundation
 import WGCore
 
-// TODO(phase4): TunnelController
+struct TunnelState: Codable {
+    var name: String
+    var utun: String
+    var routes: [RouteEntry] = []
+    /// Original DNS per network service; nil when the config set no DNS.
+    var dnsBackup: [String: DNSSetting]?
+}
+
+enum TunnelError: Error, CustomStringConvertible {
+    case invalidName(String)
+    case alreadyUp(String)
+    case notUp(String)
+    case interfaceStartFailed(String)
+
+    var description: String {
+        switch self {
+        case let .invalidName(n): return "invalid tunnel name '\(n)'"
+        case let .alreadyUp(n): return "tunnel '\(n)' is already up"
+        case let .notUp(n): return "tunnel '\(n)' is not up"
+        case let .interfaceStartFailed(m): return "wireguard-go failed: \(m)"
+        }
+    }
+}
+
+/// Owns all tunnel lifecycle. Called serially from the socket server thread.
+final class TunnelController {
+    /// wireguard-go sockets and name files (cleared on reboot).
+    static let runDir = "/var/run/wireguard"
+    /// Persistent state so DNS can be restored even after a crash or reboot.
+    static let stateDir = "/Library/Application Support/WGBar/state"
+    static let defaultMTU = 1420
+
+    private var tunnels: [String: TunnelState] = [:]
+    private let fm = FileManager.default
+
+    init() {
+        for dir in [Self.runDir, Self.stateDir] {
+            try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: 0o700])
+        }
+    }
+
+    private func statePath(_ name: String) -> String { "\(Self.stateDir)/\(name).state.json" }
+    private func nameFile(_ name: String) -> String { "\(Self.runDir)/\(name).name" }
+    private func uapiSocket(_ utun: String) -> String { "\(Self.runDir)/\(utun).sock" }
+
+    private func save(_ s: TunnelState) {
+        tunnels[s.name] = s
+        do {
+            let data = try JSONEncoder().encode(s)
+            try data.write(to: URL(fileURLWithPath: statePath(s.name)), options: .atomic)
+            chmod(statePath(s.name), 0o600)
+        } catch {
+            log("failed to save state for \(s.name): \(error)", error: true)
+        }
+    }
+
+    // MARK: up
+
+    func up(name: String, configText: String) throws {
+        guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
+        guard tunnels[name] == nil else { throw TunnelError.alreadyUp(name) }
+        // Always re-validate: never trust the client.
+        let config = try WGConfig(parsing: configText)
+
+        try? fm.removeItem(atPath: nameFile(name))
+        try Shell.run(.wireguardGo, ["utun"], env: ["WG_TUN_NAME_FILE": nameFile(name)], captureOutput: false)
+
+        guard let raw = try? String(contentsOfFile: nameFile(name), encoding: .utf8) else {
+            throw TunnelError.interfaceStartFailed("no interface name written")
+        }
+        let utun = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard utun.range(of: "^utun[0-9]+$", options: .regularExpression) != nil else {
+            throw TunnelError.interfaceStartFailed("unexpected interface name '\(utun)'")
+        }
+        log("\(name): wireguard-go started on \(utun)")
+
+        var state = TunnelState(name: name, utun: utun)
+        save(state) // persist immediately so a crash mid-setup can be cleaned up
+
+        do {
+            try waitForUAPI(utun)
+            try setconf(config, utun: utun, name: name)
+
+            for addr in config.interface.addresses { try NetworkConfigurator.addAddress(addr, utun: utun) }
+            try NetworkConfigurator.setMTU(config.interface.mtu ?? Self.defaultMTU, utun: utun)
+            try NetworkConfigurator.bringUp(utun)
+
+            try addRoutes(config, state: &state)
+            try applyDNS(config, state: &state)
+            log("\(name): up on \(utun) (\(state.routes.count) routes, dns \(state.dnsBackup == nil ? "unchanged" : "set"))")
+        } catch {
+            log("\(name): up failed, rolling back: \(error)", error: true)
+            teardown(state)
+            throw error
+        }
+    }
+
+    private func waitForUAPI(_ utun: String) throws {
+        for _ in 0..<30 {
+            if fm.fileExists(atPath: uapiSocket(utun)) { return }
+            usleep(100_000)
+        }
+        throw TunnelError.interfaceStartFailed("control socket for \(utun) did not appear")
+    }
+
+    /// Writes the setconf text to a root-only temp file, applies it, then deletes it.
+    private func setconf(_ config: WGConfig, utun: String, name: String) throws {
+        let path = "\(Self.runDir)/\(name).setconf"
+        unlink(path)
+        let fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { throw UnixSocketError.system("open setconf", errno) }
+        defer { unlink(path) }
+        do {
+            try UnixSocket.writeAll(fd, Data(config.wgSetconfText().utf8))
+            close(fd)
+        } catch {
+            close(fd)
+            throw error
+        }
+        try Shell.run(.wg, ["setconf", utun, path])
+    }
+
+    private func addRoutes(_ config: WGConfig, state: inout TunnelState) throws {
+        var allowed: [String] = []
+        for cidr in config.peers.flatMap(\.allowedIPs) where !allowed.contains(cidr) { allowed.append(cidr) }
+        let full4 = allowed.contains("0.0.0.0/0")
+        let full6 = allowed.contains("::/0")
+
+        // Full tunnel: pin each endpoint to the original default gateway first.
+        if full4 || full6 {
+            for ip in NetworkConfigurator.resolvedEndpointIPs(utun: state.utun) {
+                let fam = NetworkConfigurator.family(of: ip)
+                guard (fam == "inet" && full4) || (fam == "inet6" && full6),
+                      let def = NetworkConfigurator.defaultRoute(family: fam),
+                      def.interface != state.utun else { continue }
+                let r = RouteEntry(family: fam, destination: ip, gateway: def.gateway,
+                                   interface: def.gateway == nil ? def.interface : nil)
+                try addRoute(r, state: &state)
+            }
+        }
+
+        for cidr in allowed {
+            let fam = NetworkConfigurator.family(of: String(cidr.split(separator: "/")[0]))
+            for dest in NetworkConfigurator.expand(cidr) {
+                try addRoute(RouteEntry(family: fam, destination: dest, gateway: nil, interface: state.utun), state: &state)
+            }
+        }
+    }
+
+    private func addRoute(_ r: RouteEntry, state: inout TunnelState) throws {
+        do {
+            try NetworkConfigurator.addRoute(r)
+            state.routes.append(r)
+            save(state)
+        } catch let ShellError.failed(_, _, _, stderr) where stderr.contains("File exists") {
+            log("\(state.name): route \(r.destination) already exists, skipping")
+        }
+    }
+
+    private func applyDNS(_ config: WGConfig, state: inout TunnelState) throws {
+        let iface = config.interface
+        guard !iface.dns.isEmpty || !iface.dnsSearch.isEmpty else { return }
+
+        var backup: [String: DNSSetting] = [:]
+        for svc in try NetworkConfigurator.networkServices() {
+            do { backup[svc] = try NetworkConfigurator.currentDNS(service: svc) }
+            catch { log("\(state.name): cannot read DNS for '\(svc)': \(error)", error: true) }
+        }
+        state.dnsBackup = backup
+        save(state) // backup must be on disk before we change anything
+
+        let wanted = DNSSetting(servers: iface.dns, searchDomains: iface.dnsSearch)
+        for svc in backup.keys.sorted() {
+            do { try NetworkConfigurator.apply(wanted, to: svc) }
+            catch { log("\(state.name): cannot set DNS for '\(svc)': \(error)", error: true) }
+        }
+    }
+
+    // MARK: down
+
+    func down(name: String) throws {
+        guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
+        guard let state = tunnels[name] else { throw TunnelError.notUp(name) }
+        teardown(state)
+        log("\(name): down")
+    }
+
+    /// Best-effort reverse of `up`: DNS → routes → interface → state files.
+    private func teardown(_ state: TunnelState) {
+        if let backup = state.dnsBackup {
+            for (svc, setting) in backup.sorted(by: { $0.key < $1.key }) {
+                do { try NetworkConfigurator.apply(setting, to: svc) }
+                catch { log("\(state.name): cannot restore DNS for '\(svc)': \(error)", error: true) }
+            }
+        }
+        for r in state.routes.reversed() { NetworkConfigurator.deleteRoute(r) }
+        // Removing the UAPI socket makes wireguard-go exit and destroy the utun.
+        unlink(uapiSocket(state.utun))
+        unlink(nameFile(state.name))
+        unlink(statePath(state.name))
+        tunnels[state.name] = nil
+    }
+
+    // MARK: status / recovery
+
+    func status() -> [TunnelStatus] {
+        tunnels.values.sorted { $0.name < $1.name }.map { s in
+            let dump = (try? Shell.run(.wg, ["show", s.utun, "dump"]))?.stdout ?? ""
+            return TunnelStatus(name: s.name, interface: s.utun, peers: WGDump.parsePeers(dump))
+        }
+    }
+
+    /// On start: re-adopt tunnels that are still alive, clean up the rest.
+    func recoverOnStart() {
+        guard let files = try? fm.contentsOfDirectory(atPath: Self.stateDir) else { return }
+        for file in files where file.hasSuffix(".state.json") {
+            let path = "\(Self.stateDir)/\(file)"
+            guard let data = fm.contents(atPath: path),
+                  let s = try? JSONDecoder().decode(TunnelState.self, from: data),
+                  Validation.isValidTunnelName(s.name),
+                  s.utun.range(of: "^utun[0-9]+$", options: .regularExpression) != nil else {
+                log("removing unreadable state file \(file)", error: true)
+                unlink(path)
+                continue
+            }
+            if fm.fileExists(atPath: uapiSocket(s.utun)) {
+                tunnels[s.name] = s
+                log("\(s.name): re-adopted running tunnel on \(s.utun)")
+            } else {
+                log("\(s.name): cleaning up stale state from previous run")
+                teardown(s)
+            }
+        }
+    }
+}
