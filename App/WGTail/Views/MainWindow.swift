@@ -50,7 +50,7 @@ struct MainWindow: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 200)
         } content: {
             tunnelList
-                .navigationSplitViewColumnWidth(min: 280, ideal: 340)
+                .navigationSplitViewColumnWidth(min: 260, ideal: 300)
         } detail: {
             detail
         }
@@ -60,7 +60,7 @@ struct MainWindow: View {
                     .help("Import config")
             }
         }
-        .frame(minWidth: 900, minHeight: 560)
+        .frame(minWidth: 820, minHeight: 520)
         .onAppear {
             store.windowOpen = true
             NSApp.setActivationPolicy(.regular)
@@ -133,7 +133,7 @@ struct MainWindow: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 6) {
                         ForEach(filtered) { p in
                             TunnelCard(profile: p, selected: selection == p.name)
                                 .onTapGesture { selection = p.name }
@@ -172,54 +172,50 @@ struct TunnelCard: View {
     @EnvironmentObject var store: TunnelStore
     let profile: TunnelProfile
     let selected: Bool
+    @State private var hovering = false
 
     private var isActive: Bool { store.active?.name == profile.name }
+    private var accent: Color { StatusStyle.color(connected: isActive, stale: store.isHandshakeStale) }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Circle()
-                .fill(isActive ? Color.green : Color.secondary.opacity(0.4))
-                .frame(width: 9, height: 9)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(profile.name).font(.system(size: 14, weight: .semibold))
+        HStack(spacing: 10) {
+            PingBadge(color: accent, animating: isActive)
+                .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(profile.name).font(.system(size: 13, weight: .semibold))
+                    if profile.favorite { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow) }
+                }
                 Text(profile.endpoint ?? "no endpoint")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(selected ? Color.white.opacity(0.9) : .secondary)
-                Text(allowedIPs)
-                    .font(.system(size: 11))
-                    .foregroundStyle(selected ? Color.white.opacity(0.65) : Color.secondary.opacity(0.8))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
+                Text(isActive ? (store.isHandshakeStale ? "No recent handshake" : "Connected") : "Disconnected")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(isActive ? accent : .secondary)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
             if isActive {
-                Sparkline(samples: store.samples)
-                    .frame(width: 70, height: 26)
+                Sparkline(samples: store.samples, color: accent).frame(width: 48, height: 20)
             }
-            Button { store.toggleFavorite(profile.name) } label: {
-                Image(systemName: profile.favorite ? "star.fill" : "star")
-                    .foregroundStyle(profile.favorite ? Color.yellow : (selected ? .white : .secondary))
-            }
-            .buttonStyle(.plain)
             Toggle("", isOn: Binding(
                 get: { isActive },
                 set: { on in Task { on ? await store.connect(profile.name) : await store.disconnect() } }))
                 .toggleStyle(.switch)
+                .controlSize(.small)
                 .labelsHidden()
                 .disabled(store.busy || !store.helperReachable)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .foregroundStyle(selected ? Color.white : Color.primary)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(selected ? Color.accentColor : Color.primary.opacity(0.05)))
+        .padding(10)
+        .card(tint: selected ? .accentColor : (hovering ? .primary : nil), radius: 12)
         .contentShape(Rectangle())
-    }
-
-    private var allowedIPs: String {
-        let ips = store.config(profile.name)?.peers.flatMap(\.allowedIPs) ?? []
-        if profile.routeAll { return "0.0.0.0/0, ::/0 (route all)" }
-        return ips.isEmpty ? "-" : ips.joined(separator: ", ")
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button(profile.favorite ? "Unfavorite" : "Favorite") { store.toggleFavorite(profile.name) }
+            Button(isActive ? "Disconnect" : "Connect") {
+                Task { isActive ? await store.disconnect() : await store.connect(profile.name) }
+            }
+        }
     }
 }
 
