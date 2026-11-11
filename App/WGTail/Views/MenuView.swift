@@ -13,7 +13,7 @@ struct MenuView: View {
     private var peer: PeerStatus? { store.active?.peers.first }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             if !store.helperReachable { helperBanner }
             hero
             if let err = store.lastError {
@@ -31,8 +31,8 @@ struct MenuView: View {
             tunnelsCard
             footer
         }
-        .padding(14)
-        .frame(width: 360)
+        .padding(10)
+        .frame(width: 310)
         .onAppear { store.menuOpen = true }
         .onDisappear { store.menuOpen = false }
     }
@@ -45,30 +45,30 @@ struct MenuView: View {
     }
 
     private var hero: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             PingBadge(color: accent, animating: connected || store.busy, fast: store.busy)
-                .frame(width: 56, height: 56)
+                .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 3) {
                 Text(store.active?.name ?? store.currentProfile?.name ?? "WGTail")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                 HStack(spacing: 5) {
                     Circle().fill(accent).frame(width: 7, height: 7)
                     Text(statusText).foregroundStyle(connected ? accent : .secondary)
                 }
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 if let ep = store.currentProfile?.endpoint {
-                    Text(ep).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                    Text(ep).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer()
             Toggle("", isOn: connectedBinding)
                 .toggleStyle(.switch)
-                .controlSize(.large)
+                .controlSize(.small)
                 .labelsHidden()
                 .disabled(store.busy || !store.helperReachable || store.profiles.isEmpty)
         }
-        .padding(14)
+        .padding(10)
         .background(card(tint: connected ? accent : nil))
     }
 
@@ -91,7 +91,7 @@ struct MenuView: View {
 
     private var statsGrid: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                 StatTile(icon: "arrow.down", tint: .green, title: "Download",
                          value: rate(store.samples.last?.rx ?? 0), sub: "Total \(Format.bytes(peer?.rxBytes ?? 0))")
                 StatTile(icon: "arrow.up", tint: .blue, title: "Upload",
@@ -130,14 +130,14 @@ struct MenuView: View {
             .chartXScale(domain: Date().addingTimeInterval(-60)...Date())
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            .frame(height: 64)
+            .frame(height: 44)
             .overlay {
                 if store.samples.count < 2 {
                     Text("Collecting…").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
         }
-        .padding(12)
+        .padding(9)
         .background(card())
     }
 
@@ -152,7 +152,7 @@ struct MenuView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "desktopcomputer").foregroundStyle(.secondary)
-                        Text(addr).font(.system(size: 12, design: .monospaced))
+                        Text(addr).font(.system(size: 11, design: .monospaced))
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 10)).foregroundStyle(copied ? Color.green : .secondary)
                     }
@@ -170,8 +170,8 @@ struct MenuView: View {
                     .disabled(store.busy)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(card())
     }
 
@@ -195,14 +195,14 @@ struct MenuView: View {
                 }
             }
         }
-        .padding(8)
+        .padding(6)
         .background(card())
     }
 
     // MARK: Footer
 
     private var footer: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             FooterButton(icon: "rectangle.grid.2x2", title: "Dashboard") { open("main") }
             FooterButton(icon: "plus", title: "Import") { open("import") }
             FooterButton(icon: "gearshape", title: "Settings") { open("settings") }
@@ -229,9 +229,9 @@ struct MenuView: View {
     // MARK: Helpers
 
     private func card(tint: Color? = nil) -> some View {
-        RoundedRectangle(cornerRadius: 12)
+        RoundedRectangle(cornerRadius: 10)
             .fill(tint.map { $0.opacity(0.10) } ?? Color.primary.opacity(0.05))
-            .overlay(RoundedRectangle(cornerRadius: 12)
+            .overlay(RoundedRectangle(cornerRadius: 10)
                 .strokeBorder((tint ?? Color.primary).opacity(tint == nil ? 0.06 : 0.25), lineWidth: 0.5))
     }
 
@@ -301,28 +301,28 @@ struct StatTile: View {
     let sub: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(tint)
-                    .frame(width: 18, height: 18)
+                    .frame(width: 15, height: 15)
                     .background(Circle().fill(tint.opacity(0.15)))
-                Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
             }
             Text(value)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(sub).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
+        .padding(7)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 9)
                 .fill(Color.primary.opacity(0.05))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)))
+                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)))
     }
 }
 
@@ -335,12 +335,12 @@ private struct FooterButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                Image(systemName: icon).font(.system(size: 13))
-                Text(title).font(.system(size: 10))
+                Image(systemName: icon).font(.system(size: 11))
+                Text(title).font(.system(size: 9))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 9).fill(Color.primary.opacity(hovering ? 0.10 : 0.04)))
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(hovering ? 0.10 : 0.04)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
