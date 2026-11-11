@@ -3,7 +3,7 @@
 import AppKit
 
 let root = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
-let iconset = "\(root)/App/WGTail/Assets.xcassets/AppIcon.appiconset"
+let iconset = "\(root)/App/Wirelight/Assets.xcassets/AppIcon.appiconset"
 try FileManager.default.createDirectory(atPath: iconset, withIntermediateDirectories: true)
 
 
@@ -65,5 +65,5 @@ let contents: [String: Any] = ["images": images, "info": ["version": 1, "author"
 try JSONSerialization.data(withJSONObject: contents, options: [.prettyPrinted, .sortedKeys])
     .write(to: URL(fileURLWithPath: "\(iconset)/Contents.json"))
 try #"{"info":{"version":1,"author":"xcode"}}"#.data(using: .utf8)!
-    .write(to: URL(fileURLWithPath: "\(root)/App/WGTail/Assets.xcassets/Contents.json"))
+    .write(to: URL(fileURLWithPath: "\(root)/App/Wirelight/Assets.xcassets/Contents.json"))
 print("wrote \(iconset)")

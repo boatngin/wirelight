@@ -79,7 +79,7 @@ enum MenuBarIcon {
             return true
         }
         img.isTemplate = true
-        img.accessibilityDescription = "WGTail"
+        img.accessibilityDescription = "Wirelight"
         cache[key] = img
         return img
     }
