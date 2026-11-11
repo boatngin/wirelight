@@ -28,6 +28,11 @@ struct MenuView: View {
                 trafficCard
                 addressRow
             }
+            if let p = store.currentProfile {
+                SplitCard(profile: p)
+                    .padding(10)
+                    .background(card())
+            }
             tunnelsCard
             footer
         }
