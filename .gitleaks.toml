@@ -3,7 +3,11 @@ title = "Wirelight gitleaks config"
 [extend]
 useDefault = true
 
-# Unit tests use throwaway WireGuard keys generated with `wg genkey`.
+# Unit tests and the app's demo mode use throwaway WireGuard keys generated
+# with `wg genkey`. They were never used on a real tunnel.
 [allowlist]
-description = "Test-only WireGuard keys"
+description = "Test-only and demo-only WireGuard keys"
 paths = ['''^Tests/''']
+regexes = [
+  '''aJZAOjSd91Y8ZUTmknBlNoqDd/yEMhr6u\+lNsOSQ7Xo=''',
+]
