@@ -232,7 +232,7 @@ struct TunnelDetailView: View {
                 }
                 PillButton(icon: profile.favorite ? "star.fill" : "star",
                            title: profile.favorite ? "Unfavorite" : "Favorite") { store.toggleFavorite(profile.name) }
-                PillButton(icon: "pencil", title: "Edit") { openWindow(id: "settings") }
+                PillButton(icon: "pencil", title: "Edit") { store.mainSection = .settings }
                 PillButton(icon: "square.and.arrow.up", title: "Export") { exportConfig() }
                 Spacer()
             }
