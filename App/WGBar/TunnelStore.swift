@@ -11,7 +11,41 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var endpoint: String?
     var addresses: [String]
     var routeAll: Bool = false
+    var favorite: Bool = false
+    var createdAt: Date?
     var id: String { name }
+
+    init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
+         favorite: Bool = false, createdAt: Date? = Date()) {
+        self.name = name; self.endpoint = endpoint; self.addresses = addresses
+        self.routeAll = routeAll; self.favorite = favorite; self.createdAt = createdAt
+    }
+
+    // Tolerate profiles saved by older versions (missing keys).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        endpoint = try c.decodeIfPresent(String.self, forKey: .endpoint)
+        addresses = try c.decodeIfPresent([String].self, forKey: .addresses) ?? []
+        routeAll = try c.decodeIfPresent(Bool.self, forKey: .routeAll) ?? false
+        favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite) ?? false
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+}
+
+/// One traffic sample (bytes/second) derived from successive status polls.
+struct TrafficSample: Identifiable, Equatable {
+    let date: Date
+    let rx: Double
+    let tx: Double
+    var id: Date { date }
+}
+
+struct LogEntry: Identifiable {
+    let id = UUID()
+    let date: Date
+    let message: String
+    let isError: Bool
 }
 
 enum StoreError: Error, CustomStringConvertible {
@@ -35,7 +69,20 @@ final class TunnelStore: ObservableObject {
     static let staleAfter: TimeInterval = 180
 
     @Published private(set) var profiles: [TunnelProfile] = []
-    @Published private(set) var active: TunnelStatus?
+    @Published private(set) var active: TunnelStatus? {
+        didSet { activeChanged(from: oldValue) }
+    }
+    /// Traffic for the active tunnel over the last 60 seconds.
+    @Published private(set) var samples: [TrafficSample] = []
+    @Published private(set) var connectedSince: Date?
+    @Published private(set) var log: [LogEntry] = []
+    /// Parsed configs cached from the Keychain (avoid reading it on every render).
+    @Published private(set) var configs: [String: WGConfig] = [:]
+    /// Main window open → poll as fast as when the menu is open.
+    var windowOpen = false {
+        didSet { if windowOpen && !oldValue { Task { await refresh() } } }
+    }
+    private var lastCounters: (date: Date, rx: UInt64, tx: UInt64)?
     @Published private(set) var helperReachable = true
     @Published private(set) var busy = false {
         didSet { busy ? startIconAnimation() : stopIconAnimation() }
@@ -138,7 +185,7 @@ final class TunnelStore: ObservableObject {
             var elapsed = 0
             while !Task.isCancelled {
                 guard let self else { return }
-                let interval = self.menuOpen ? 2 : 10
+                let interval = (self.menuOpen || self.windowOpen) ? 2 : 10
                 if elapsed == 0 { await self.refresh() }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 elapsed += 1
@@ -199,8 +246,10 @@ final class TunnelStore: ObservableObject {
             selectedName = name
             notifiedStale = false
             notify("Connected", name)
+            addLog("Connected \(name)")
         } catch {
             lastError = String(describing: error)
+            addLog(String(describing: error), isError: true)
         }
     }
 
@@ -213,8 +262,10 @@ final class TunnelStore: ObservableObject {
             try check(await HelperClient.send(.down(name: current.name), timeout: 30))
             active = nil
             notify("Disconnected", current.name)
+            addLog("Disconnected \(current.name)")
         } catch {
             lastError = String(describing: error)
+            addLog(String(describing: error), isError: true)
         }
     }
 
@@ -236,6 +287,8 @@ final class TunnelStore: ObservableObject {
         guard profile(name) == nil else { throw StoreError.duplicateName(name) }
         let cfg = try WGConfig(parsing: text)
         try KeychainStore.save(text, account: name)
+        configs[name] = cfg
+        addLog("Imported \(name)")
         profiles.append(TunnelProfile(name: name, endpoint: cfg.peers.first?.endpoint, addresses: cfg.interface.addresses))
         saveProfiles()
         if selectedName == nil { selectedName = name }
@@ -246,6 +299,8 @@ final class TunnelStore: ObservableObject {
     func updateConfig(name: String, text: String) throws {
         let cfg = try WGConfig(parsing: text)
         try KeychainStore.save(text, account: name)
+        configs[name] = cfg
+        addLog("Updated config for \(name)")
         if let i = profiles.firstIndex(where: { $0.name == name }) {
             profiles[i].endpoint = cfg.peers.first?.endpoint
             profiles[i].addresses = cfg.interface.addresses
@@ -256,6 +311,8 @@ final class TunnelStore: ObservableObject {
     func delete(_ name: String) async {
         if active?.name == name { await disconnect() }
         KeychainStore.delete(name)
+        configs[name] = nil
+        addLog("Deleted \(name)")
         profiles.removeAll { $0.name == name }
         saveProfiles()
         if selectedName == name { selectedName = profiles.first?.name }
@@ -265,6 +322,45 @@ final class TunnelStore: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: Keys.profiles),
               let list = try? JSONDecoder().decode([TunnelProfile].self, from: data) else { return }
         profiles = list
+        for p in list {
+            if let text = KeychainStore.load(p.name), let c = try? WGConfig(parsing: text) { configs[p.name] = c }
+        }
+    }
+
+    func toggleFavorite(_ name: String) {
+        guard let i = profiles.firstIndex(where: { $0.name == name }) else { return }
+        profiles[i].favorite.toggle()
+        saveProfiles()
+    }
+
+    /// Read-only so it is safe to call from view bodies; filled in `loadProfiles`.
+    func config(_ name: String) -> WGConfig? { configs[name] }
+
+    func addLog(_ message: String, isError: Bool = false) {
+        log.append(LogEntry(date: Date(), message: message, isError: isError))
+        if log.count > 500 { log.removeFirst(log.count - 500) }
+    }
+
+    private func activeChanged(from old: TunnelStatus?) {
+        if active?.name != old?.name {
+            samples = []
+            lastCounters = nil
+            connectedSince = active == nil ? nil : Date()
+        }
+        guard let peer = active?.peers.first else { return }
+        let now = Date()
+        if let last = lastCounters, now.timeIntervalSince(last.date) > 0.5 {
+            let dt = now.timeIntervalSince(last.date)
+            let rx = Double(peer.rxBytes &- last.rx) / dt
+            let tx = Double(peer.txBytes &- last.tx) / dt
+            if peer.rxBytes >= last.rx && peer.txBytes >= last.tx {
+                samples.append(TrafficSample(date: now, rx: rx, tx: tx))
+                samples.removeAll { now.timeIntervalSince($0.date) > 60 }
+            }
+        }
+        if lastCounters == nil || now.timeIntervalSince(lastCounters!.date) > 0.5 {
+            lastCounters = (now, peer.rxBytes, peer.txBytes)
+        }
     }
 
     private func saveProfiles() {

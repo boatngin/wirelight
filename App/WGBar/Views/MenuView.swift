@@ -175,6 +175,7 @@ struct MenuView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 0) {
+            menuButton("Open WGBar…") { open("main") }
             menuButton("Import config…") { open("import") }
             menuButton("Settings…") { open("settings") }
             Divider().padding(.vertical, 4)
