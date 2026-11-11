@@ -82,6 +82,10 @@ final class TunnelStore: ObservableObject {
     @Published private(set) var samples: [TrafficSample] = []
     @Published private(set) var connectedSince: Date?
     @Published private(set) var log: [LogEntry] = []
+    /// Which page the dashboard window shows (set by menu shortcuts too).
+    @Published var mainSection: SidebarItem? = .all
+    /// Tunnel selected in the dashboard list.
+    @Published var mainSelection: String?
     /// Parsed configs cached from the Keychain (avoid reading it on every render).
     @Published private(set) var configs: [String: WGConfig] = [:]
     /// Main window open → poll as fast as when the menu is open.

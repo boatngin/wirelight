@@ -41,8 +41,6 @@ struct MainWindow: View {
     @EnvironmentObject var store: TunnelStore
     @Environment(\.openWindow) private var openWindow
 
-    @State private var section: SidebarItem? = .all
-    @State private var selection: String?
 
     var body: some View {
         NavigationSplitView {
@@ -65,7 +63,7 @@ struct MainWindow: View {
             store.windowOpen = true
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
-            if selection == nil { selection = store.activeProfile?.name ?? store.profiles.first?.name }
+            if store.mainSelection == nil { store.mainSelection = store.activeProfile?.name ?? store.profiles.first?.name }
         }
         .onDisappear {
             store.windowOpen = false
@@ -76,7 +74,7 @@ struct MainWindow: View {
     // MARK: Sidebar
 
     private var sidebar: some View {
-        List(selection: $section) {
+        List(selection: $store.mainSection) {
             ForEach(SidebarItem.allCases) { item in
                 HStack {
                     Label {
@@ -102,7 +100,7 @@ struct MainWindow: View {
     // MARK: List
 
     private var filtered: [TunnelProfile] {
-        switch section {
+        switch store.mainSection {
         case .active: return store.profiles.filter { $0.name == store.active?.name }
         case .favorites: return store.profiles.filter(\.favorite)
         default: return store.profiles
@@ -113,7 +111,7 @@ struct MainWindow: View {
     private var tunnelList: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
-                Text((section ?? .all).title).font(.headline)
+                Text((store.mainSection ?? .all).title).font(.headline)
                 Text("\(store.profiles.count) tunnel\(store.profiles.count == 1 ? "" : "s"), \(store.isConnected ? 1 : 0) active")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -135,8 +133,8 @@ struct MainWindow: View {
                 ScrollView {
                     VStack(spacing: 6) {
                         ForEach(filtered) { p in
-                            TunnelCard(profile: p, selected: selection == p.name)
-                                .onTapGesture { selection = p.name }
+                            TunnelCard(profile: p, selected: store.mainSelection == p.name)
+                                .onTapGesture { store.mainSelection = p.name }
                         }
                     }
                     .padding(.horizontal, 12)
@@ -150,13 +148,13 @@ struct MainWindow: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch section {
+        switch store.mainSection {
         case .settings:
             ScrollView { SettingsView().frame(maxWidth: .infinity, alignment: .leading) }
         case .log:
             LogView()
         default:
-            if let name = selection, let profile = store.profile(name) {
+            if let name = store.mainSelection, let profile = store.profile(name) {
                 TunnelDetailView(profile: profile)
             } else {
                 Text("Select a tunnel").foregroundStyle(.secondary)

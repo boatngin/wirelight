@@ -25,10 +25,5 @@ struct WGTailApp: App {
         }
         .windowResizability(.contentSize)
 
-        Window("WGTail Settings", id: "settings") {
-            SettingsView()
-                .environmentObject(store)
-        }
-        .windowResizability(.contentSize)
     }
 }

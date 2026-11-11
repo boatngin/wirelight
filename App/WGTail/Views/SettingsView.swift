@@ -66,7 +66,7 @@ struct SettingsView: View {
         }
         .padding(20)
         .frame(width: 520)
-        .onAppear { if selected == nil { selected = store.currentProfile?.name } ; if let s = selected { loadEditor(s) } }
+        .onAppear { if selected == nil { selected = store.mainSelection ?? store.currentProfile?.name } ; if let s = selected { loadEditor(s) } }
         .onChange(of: selected) { name in if let name { loadEditor(name) } else { editorText = "" } }
     }
 

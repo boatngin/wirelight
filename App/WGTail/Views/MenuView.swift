@@ -208,9 +208,9 @@ struct MenuView: View {
 
     private var footer: some View {
         HStack(spacing: 4) {
-            FooterButton(icon: "rectangle.grid.2x2", title: "Dashboard") { open("main") }
+            FooterButton(icon: "rectangle.grid.2x2", title: "Dashboard") { openMain(.all) }
             FooterButton(icon: "plus", title: "Import") { open("import") }
-            FooterButton(icon: "gearshape", title: "Settings") { open("settings") }
+            FooterButton(icon: "gearshape", title: "Settings") { openMain(.settings) }
             FooterButton(icon: "power", title: "Quit") { NSApp.terminate(nil) }
         }
     }
@@ -256,6 +256,13 @@ struct MenuView: View {
         if s < 60 { return "\(s)s" }
         if s < 3600 { return "\(s / 60)m \(s % 60)s" }
         return "\(s / 3600)h \((s % 3600) / 60)m"
+    }
+
+    /// Opens the dashboard window on a given page (Settings lives there too).
+    private func openMain(_ section: SidebarItem) {
+        store.mainSection = section
+        if section == .all, store.mainSelection == nil { store.mainSelection = store.currentProfile?.name }
+        open("main")
     }
 
     private func open(_ id: String) {
