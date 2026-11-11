@@ -1,0 +1,23 @@
+#!/bin/bash
+# Fix ownership/permissions and (re)start the privileged helper.
+set -u
+LABEL="com.thanaboat.wgbar.helper"
+PLIST="/Library/LaunchDaemons/$LABEL.plist"
+HELPER="/Library/PrivilegedHelperTools/wgbar-helper"
+
+chown root:wheel "$HELPER" "$PLIST" /usr/local/bin/wgbarctl 2>/dev/null
+chmod 755 "$HELPER" /usr/local/bin/wgbarctl
+chmod 644 "$PLIST"
+
+launchctl bootout system/"$LABEL" 2>/dev/null || true
+for _ in 1 2 3 4 5 6 7 8; do
+    launchctl print system/"$LABEL" >/dev/null 2>&1 || break
+    sleep 0.25
+done
+launchctl bootstrap system "$PLIST"
+
+# WireGuard userspace tools are required but not bundled (see README).
+if [[ ! -x /opt/homebrew/bin/wireguard-go && ! -x /usr/local/bin/wireguard-go ]]; then
+    echo "Wirelight: wireguard-go not found. Install with: brew install wireguard-tools wireguard-go"
+fi
+exit 0

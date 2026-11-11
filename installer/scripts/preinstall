@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stop a previously installed helper so its binary can be replaced.
+launchctl bootout system/com.thanaboat.wgbar.helper 2>/dev/null || true
+exit 0

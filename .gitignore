@@ -12,3 +12,6 @@ App/Wirelight.xcodeproj/
 build/
 
 .DS_Store
+
+# Personal signing settings
+App/Config/Local.xcconfig

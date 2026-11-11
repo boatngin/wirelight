@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Swift package (build + test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  app:
+    name: macOS app
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: cd App && xcodegen generate
+      - name: Build app (ad-hoc signed)
+        run: |
+          xcodebuild -project App/Wirelight.xcodeproj -scheme Wirelight \
+            -configuration Debug -derivedDataPath build/DerivedData build
+
+  lint:
+    name: Scripts and plists
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: brew install shellcheck
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh installer/uninstall.sh installer/scripts/*
+      - name: Lint plists
+        run: plutil -lint scripts/*.plist App/Wirelight/Info.plist
