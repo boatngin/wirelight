@@ -9,7 +9,7 @@ struct WGBarApp: App {
             MenuView()
                 .environmentObject(store)
         } label: {
-            Image(systemName: store.isConnected ? "network.badge.shield.half.filled" : "network")
+            Image(nsImage: MenuBarIcon.image(store.iconState))
         }
         .menuBarExtraStyle(.window)
 
