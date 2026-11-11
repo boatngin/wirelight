@@ -1,9 +1,11 @@
-# WGBar
+# WGTail
+
+> ชื่อภายใน (bundle id `com.thanaboat.wgbar`, helper `wgbar-helper`, CLI `wgbarctl`, Keychain service) ยังเป็นชื่อเดิม เพื่อไม่ให้ tunnel ที่ import ไว้แล้วหาย
 
 แอป menu bar บน macOS สำหรับต่อ WireGuard ใช้ได้กับบัญชี Apple Developer แบบฟรี (ไม่ต้องใช้ Network Extension)
 
 ```
-WGBar.app (SwiftUI, menu bar)  ──JSON / Unix socket──▶  wgbar-helper (root, LaunchDaemon)
+WGTail.app (SwiftUI, menu bar)  ──JSON / Unix socket──▶  wgbar-helper (root, LaunchDaemon)
                                  /var/run/wgbar.sock      ├─ wireguard-go  (สร้าง utun)
                                                           ├─ wg setconf    (key / peer)
                                                           ├─ ifconfig / route
@@ -37,7 +39,7 @@ wgbarctl doctor
 ```bash
 ./scripts/build-app.sh
 ```
-ได้ไฟล์ `build/WGBar-<version>.zip` ให้แตกไฟล์แล้วลาก `WGBar.app` ไปไว้ที่ `/Applications`
+ได้ไฟล์ `build/WGTail-<version>.zip` ให้แตกไฟล์แล้วลาก `WGTail.app` ไปไว้ที่ `/Applications`
 
 ถ้าจะ sign ด้วย Personal Team ให้ใส่ `DEVELOPMENT_TEAM` ใน `App/project.yml` ถ้าไม่ใส่จะ sign แบบ ad-hoc ซึ่งใช้งานได้ แต่ทุกครั้งที่ build ใหม่ Keychain จะถามสิทธิ์อีกรอบ
 
@@ -93,7 +95,7 @@ sudo tail -f /var/log/wgbar-helper.log
 | `wgbarctl doctor` ขึ้น FAIL ที่ helper responds | helper เป็นเวอร์ชันเก่า ให้รัน `install-helper.sh` ใหม่ |
 | ไม่มี handshake | เช็ค endpoint, port forward และ firewall ฝั่ง server ลองทดสอบด้วย `sudo wg-quick up file.conf` เพื่อแยกว่าปัญหาอยู่ที่แอปหรือที่ config |
 | DNS ไม่คืนค่าเดิม | helper เก็บค่าเดิมไว้ที่ `/Library/Application Support/WGBar/state/` และจะคืนให้เองตอน start รอบถัดไป |
-| ใช้ `wg-quick` ทดสอบด้วยแล้วชนกัน | ต้อง `wg-quick down` ก่อนใช้ WGBar |
+| ใช้ `wg-quick` ทดสอบด้วยแล้วชนกัน | ต้อง `wg-quick down` ก่อนใช้ WGTail |
 
 ## Uninstall
 
@@ -101,7 +103,7 @@ sudo tail -f /var/log/wgbar-helper.log
 ```bash
 ./scripts/uninstall-helper.sh
 ```
-จากนั้นลบ `WGBar.app` ทิ้ง และลบ item `com.thanaboat.wgbar` ใน Keychain Access ถ้าต้องการ
+จากนั้นลบ `WGTail.app` ทิ้ง และลบ item `com.thanaboat.wgbar` ใน Keychain Access ถ้าต้องการ
 
 ## Development
 
@@ -109,7 +111,7 @@ sudo tail -f /var/log/wgbar-helper.log
 swift build && swift test
 ```
 ```bash
-cd App && xcodegen generate && open WGBar.xcodeproj
+cd App && xcodegen generate && open WGTail.xcodeproj
 ```
 ```bash
 swift scripts/make-icons.swift .

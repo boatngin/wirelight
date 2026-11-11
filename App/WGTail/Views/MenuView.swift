@@ -43,7 +43,7 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 4) {
             Label("Helper not installed", systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: 12, weight: .semibold))
-            Text("Run ./scripts/install-helper.sh in the wgbar folder, then reopen this menu.")
+            Text("Run ./scripts/install-helper.sh in the project folder, then reopen this menu.")
                 .font(.system(size: 11))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -56,7 +56,7 @@ struct MenuView: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("WGBar").font(.system(size: 14, weight: .semibold))
+                Text("WGTail").font(.system(size: 14, weight: .semibold))
                 Text(statusLine)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
@@ -175,11 +175,11 @@ struct MenuView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            menuButton("Open WGBar…") { open("main") }
+            menuButton("Open WGTail…") { open("main") }
             menuButton("Import config…") { open("import") }
             menuButton("Settings…") { open("settings") }
             Divider().padding(.vertical, 4)
-            menuButton("Quit WGBar") { NSApp.terminate(nil) }
+            menuButton("Quit WGTail") { NSApp.terminate(nil) }
         }
         .padding(.vertical, 6)
     }

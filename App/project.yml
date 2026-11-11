@@ -1,4 +1,4 @@
-name: WGBar
+name: WGTail
 options:
   bundleIdPrefix: com.thanaboat
   deploymentTarget:
@@ -7,18 +7,18 @@ packages:
   WGCore:
     path: ..
 targets:
-  WGBar:
+  WGTail:
     type: application
     platform: macOS
-    sources: [WGBar]
+    sources: [WGTail]
     dependencies:
       - package: WGCore
         product: WGCore
     info:
-      path: WGBar/Info.plist
+      path: WGTail/Info.plist
       properties:
         LSUIElement: true
-        CFBundleDisplayName: WGBar
+        CFBundleDisplayName: WGTail
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.utilities

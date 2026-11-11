@@ -8,7 +8,7 @@
 DerivedData/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
-App/WGBar.xcodeproj/
+App/WGTail.xcodeproj/
 build/
 
 .DS_Store
