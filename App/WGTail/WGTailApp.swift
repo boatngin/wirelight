@@ -19,11 +19,6 @@ struct WGTailApp: App {
         }
         .defaultSize(width: 1100, height: 700)
 
-        Window("Import Config", id: "import") {
-            ImportView()
-                .environmentObject(store)
-        }
-        .windowResizability(.contentSize)
 
     }
 }

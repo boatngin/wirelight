@@ -5,7 +5,6 @@ import WGCore
 
 struct ImportView: View {
     @EnvironmentObject var store: TunnelStore
-    @Environment(\.dismiss) private var dismiss
 
     @State private var text: String?
     @State private var name = ""
@@ -33,14 +32,14 @@ struct ImportView: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel") { reset(); dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { reset(); store.mainSection = .all }.keyboardShortcut(.cancelAction)
                 Button("Import", action: doImport)
                     .keyboardShortcut(.defaultAction)
                     .disabled(text == nil || !Validation.isValidTunnelName(name))
             }
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(maxWidth: .infinity)
     }
 
     private var dropZone: some View {
@@ -95,8 +94,10 @@ struct ImportView: View {
         guard let text else { return }
         do {
             try store.importConfig(name: name, text: text)
+            let imported = name
             reset()
-            dismiss()
+            store.mainSelection = imported
+            store.mainSection = .all
         } catch {
             self.error = String(describing: error)
         }

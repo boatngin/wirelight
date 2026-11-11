@@ -186,7 +186,7 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Tunnels").font(.system(size: 12, weight: .semibold)).padding(.horizontal, 4).padding(.bottom, 2)
             if store.profiles.isEmpty {
-                Button { open("import") } label: {
+                Button { openMain(.importConfig) } label: {
                     Label("Import your first config", systemImage: "plus.circle")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -209,7 +209,7 @@ struct MenuView: View {
     private var footer: some View {
         HStack(spacing: 4) {
             FooterButton(icon: "rectangle.grid.2x2", title: "Dashboard") { openMain(.all) }
-            FooterButton(icon: "plus", title: "Import") { open("import") }
+            FooterButton(icon: "plus", title: "Import") { openMain(.importConfig) }
             FooterButton(icon: "gearshape", title: "Settings") { openMain(.settings) }
             FooterButton(icon: "power", title: "Quit") { NSApp.terminate(nil) }
         }

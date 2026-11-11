@@ -3,7 +3,7 @@ import SwiftUI
 import WGCore
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case all, active, favorites, settings, log
+    case all, active, favorites, importConfig, settings, log
     var id: String { rawValue }
 
     var title: String {
@@ -11,6 +11,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "All Tunnels"
         case .active: return "Active"
         case .favorites: return "Favorites"
+        case .importConfig: return "Import"
         case .settings: return "Settings"
         case .log: return "Log"
         }
@@ -21,6 +22,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "list.bullet"
         case .active: return "bolt.fill"
         case .favorites: return "star.fill"
+        case .importConfig: return "square.and.arrow.down"
         case .settings: return "gearshape"
         case .log: return "doc.text"
         }
@@ -31,6 +33,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return .accentColor
         case .active: return .green
         case .favorites: return .yellow
+        case .importConfig: return .purple
         case .settings: return .secondary
         case .log: return .blue
         }
@@ -54,7 +57,7 @@ struct MainWindow: View {
         }
         .toolbar {
             ToolbarItem {
-                Button { openWindow(id: "import") } label: { Image(systemName: "plus") }
+                Button { store.mainSection = .importConfig } label: { Image(systemName: "plus") }
                     .help("Import config")
             }
         }
@@ -125,7 +128,7 @@ struct MainWindow: View {
                     Text(store.profiles.isEmpty ? "Import a .conf file to add your first tunnel" : "Nothing here")
                         .foregroundStyle(.secondary)
                     if store.profiles.isEmpty {
-                        Button("Import config") { openWindow(id: "import") }
+                        Button("Import config") { store.mainSection = .importConfig }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -153,6 +156,11 @@ struct MainWindow: View {
             ScrollView { SettingsView().frame(maxWidth: .infinity, alignment: .leading) }
         case .log:
             LogView()
+        case .importConfig:
+            ImportView()
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, 24)
         default:
             if let name = store.mainSelection, let profile = store.profile(name) {
                 TunnelDetailView(profile: profile)
