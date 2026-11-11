@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>body{font:13px -apple-system,system-ui,sans-serif;line-height:1.5;color:CanvasText}h2{font-size:18px;margin:0 0 8px}code{font:12px ui-monospace,Menlo,monospace;background:rgba(127,127,127,.15);padding:1px 4px;border-radius:4px}li{margin:4px 0}.note{color:GrayText}</style></head>
+<body>
+<h2>Welcome to Wirelight</h2>
+<p>A small menu bar app for connecting to WireGuard® peers on macOS.</p>
+<p>This installer adds:</p>
+<ul>
+<li><b>Wirelight.app</b> in <code>/Applications</code></li>
+<li>A privileged helper (<code>wgbar-helper</code>) that runs as a LaunchDaemon and sets up the tunnel interface, routes and DNS</li>
+<li>The <code>wgbarctl</code> command line tool in <code>/usr/local/bin</code></li>
+</ul>
+<p><b>Before you install</b>, make sure the WireGuard tools are installed with Homebrew:</p>
+<p><code>brew install wireguard-tools wireguard-go</code></p>
+<p class="note">Only administrators can control tunnels through the helper. Wirelight is not affiliated with or endorsed by the WireGuard project. "WireGuard" is a registered trademark of Jason A. Donenfeld.</p>
+</body></html>

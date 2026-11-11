@@ -1,83 +1,101 @@
-# Wirelight
+<p align="center">
+  <img src="docs/assets/icon.png" width="128" height="128" alt="Wirelight icon">
+</p>
 
-> ชื่อภายใน (bundle id `com.thanaboat.wgbar`, helper `wgbar-helper`, CLI `wgbarctl`, Keychain service) ยังเป็นชื่อเดิม เพื่อไม่ให้ tunnel ที่ import ไว้แล้วหาย
+<h1 align="center">Wirelight</h1>
 
-แอป menu bar บน macOS สำหรับต่อ WireGuard ใช้ได้กับบัญชี Apple Developer แบบฟรี (ไม่ต้องใช้ Network Extension)
+<p align="center">
+  A friendly menu bar client for WireGuard® tunnels on macOS.<br>
+  Works with a free Apple developer account. No Network Extension needed.
+</p>
 
-```
-Wirelight.app (SwiftUI, menu bar)  ──JSON / Unix socket──▶  wgbar-helper (root, LaunchDaemon)
-                                 /var/run/wgbar.sock      ├─ wireguard-go  (สร้าง utun)
-                                                          ├─ wg setconf    (key / peer)
-                                                          ├─ ifconfig / route
-                                                          └─ networksetup  (DNS)
-```
+<p align="center">
+  <a href="https://github.com/boatngin/wirelight/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/boatngin/wirelight?sort=semver"></a>
+  <a href="https://github.com/boatngin/wirelight/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/boatngin/wirelight/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-black">
+</p>
 
-## Requirements
+<p align="center"><a href="README.th.md">อ่านภาษาไทย</a></p>
 
-- macOS 13 ขึ้นไป, Xcode 15 ขึ้นไป
-- Homebrew และ:
-  ```bash
-  brew install wireguard-tools wireguard-go xcodegen
-  ```
-- user ต้องอยู่ในกลุ่ม **admin** (helper รับคำสั่งเฉพาะ admin)
+---
 
-## 1. ติดตั้ง helper
+## Features
+
+- **Menu bar dashboard**: connect with one switch and watch live download and upload, handshake age, uptime and a 60-second traffic chart.
+- **Dashboard window**: every tunnel, its details, import, settings and the event log in one place.
+- **Split DNS**: send only some domains (like `lan` or `corp.example`) to the tunnel's DNS.
+- **Split tunnel exclusions**: keep chosen CIDRs off the tunnel, even when routing all traffic.
+- **Route all traffic**: full-tunnel mode in one click.
+- **Stays connected**: re-resolves endpoints after sleep and network changes, and warns when the handshake goes stale.
+- **Safe by design**: keys stay in your Keychain, and the root helper rejects scripting hooks and runs only allow-listed tools. See [SECURITY.md](SECURITY.md).
+
+## Install
+
+### 1. Install the WireGuard tools
+
+Wirelight uses the official userspace tools. Install them with [Homebrew](https://brew.sh):
 
 ```bash
-./scripts/install-helper.sh
+brew install wireguard-tools wireguard-go
 ```
 
-สคริปต์จะ build, ติดตั้ง `/Library/PrivilegedHelperTools/wgbar-helper` และ `/usr/local/bin/wgbarctl`, โหลด LaunchDaemon แล้วทดสอบด้วย `wgbarctl ping` (สคริปต์จะถามรหัสผ่านเอง ห้ามรันด้วย sudo นำหน้า)
+### 2. Install Wirelight
 
-ตรวจสอบ:
+1. Download **[Wirelight.pkg](https://github.com/boatngin/wirelight/releases/latest/download/Wirelight.pkg)** from the [latest release](https://github.com/boatngin/wirelight/releases/latest).
+2. Open it and follow the installer. It installs:
+   - `Wirelight.app` in `/Applications`
+   - the helper daemon `/Library/PrivilegedHelperTools/wgbar-helper` (LaunchDaemon `com.thanaboat.wgbar.helper`)
+   - the CLI `/usr/local/bin/wgbarctl`
+
+> [!NOTE]
+> Builds aren't notarized yet. If macOS blocks the installer, right-click it and choose **Open**, or click **Open Anyway** in **System Settings › Privacy & Security**.
+> You can verify the download first: `shasum -a 256 -c Wirelight-<version>.pkg.sha256`
+
+### 3. Add a tunnel
+
+1. Open **Wirelight**. The ping icon appears in the menu bar.
+2. Choose **Import** and drop in a `.conf` file, for example one exported from OPNsense, pfSense or your VPS.
+3. Flip the switch.
+
+When macOS asks for Keychain access, choose **Always Allow** so it won't ask again.
+
+### Check your setup
+
 ```bash
 wgbarctl doctor
 ```
 
-## 2. ติดตั้งแอป
+### Uninstall
+
+Disconnect all tunnels, then run:
 
 ```bash
-./scripts/build-app.sh
+sudo /usr/local/share/wirelight/uninstall.sh
 ```
-ได้ไฟล์ `build/Wirelight-<version>.zip` ให้แตกไฟล์แล้วลาก `Wirelight.app` ไปไว้ที่ `/Applications`
 
-แอป sign ด้วย Apple Development (Personal Team) ใน `App/project.yml` เพื่อให้ Keychain จำสิทธิ์ได้ข้ามการ build ใหม่ ถ้าจะใช้บัญชีอื่นให้แก้ `DEVELOPMENT_TEAM`
+Your configs stay in the login Keychain (service `com.thanaboat.wgbar`). Delete them in Keychain Access if you want.
 
-ถ้า macOS ถามรหัส Keychain ให้กด **Always Allow** ครั้งเดียวต่อ tunnel แล้วจะไม่ถามอีก
+## Using it
 
-## 3. Import config
-
-1. คลิกไอคอน ping บน menu bar แล้วเลือก **Import config…**
-2. ลากไฟล์ `.conf` มาวาง (เช่นไฟล์ที่ export จาก OPNsense) แล้วตั้งชื่อ tunnel (a–z, 0–9, `_`, `-` ไม่เกิน 15 ตัว)
-3. กด toggle ที่หัวเมนูเพื่อเชื่อมต่อ
-
-ข้อควรรู้:
-- config ทั้งไฟล์ (รวม private key) เก็บใน **Keychain** (`com.thanaboat.wgbar`) ส่วน UserDefaults เก็บแค่ชื่อและ endpoint
-- ไม่รองรับ `PreUp/PostUp/PreDown/PostDown` และ config ที่มี key พวกนี้จะ import ไม่ได้ เพื่อกันการรันคำสั่งด้วยสิทธิ์ root
-- **Split DNS**: ใช้ DNS ของ tunnel เฉพาะ domain ที่กำหนด เช่น `lan` ส่วนชื่ออื่นใช้ DNS ปกติ (helper สร้างไฟล์ใน `/etc/resolver/` และลบออกตอน disconnect)
-- **Split tunnel exclusions**: CIDR ที่กำหนดจะไม่วิ่งผ่าน tunnel แต่ใช้เน็ตปกติแทน แม้ตอนเปิด Route all traffic
-- **Test connection**: ping DNS server ของ tunnel (หรือ IP แรกใน AllowedIPs) เพื่อวัด latency
-- **Export…**: บันทึก config ออกเป็นไฟล์ (มี private key ไฟล์จะตั้งสิทธิ์ 600)
-- **Connect on launch** (ใน Settings): เปิดแอปแล้วต่อ tunnel ล่าสุดให้อัตโนมัติ
-- **Route all traffic** ส่งทุก traffic ผ่าน tunnel (`0.0.0.0/0, ::/0`)
-- ต่อได้ทีละ tunnel ถ้ากดเปลี่ยนไป tunnel อื่น ตัวเดิมจะปิดก่อน
-- Quit แอปแล้ว tunnel ยังทำงานต่อ (ตั้งใจให้เป็นแบบนี้) เปิดแอปใหม่สถานะจะตรงกับของจริง
-
-### ไอคอนบน menu bar
-
-ไอคอนเป็นสัญญาณ sonar "ping"
-
-| ไอคอน | สถานะ |
+| Menu bar icon | Meaning |
 |---|---|
-| วงกลางกลวง กับวงนอกเส้นประจาง | ไม่ได้เชื่อมต่อ |
-| วงคลื่นขยายออกจากจุดกลาง | กำลังเชื่อมต่อ หรือกำลังตัดการเชื่อมต่อ |
-| จุดกลางทึบ มีวงคลื่นนิ่ง 2 วง | เชื่อมต่ออยู่ |
-| จุดกลางกลวง มีวงคลื่นนิ่ง | handshake หายไปนานเกิน 3 นาที |
+| Hollow centre with a faint dashed ring | Disconnected |
+| Rings pulsing outward | Connecting or disconnecting |
+| Solid centre with two steady rings | Connected |
+| Hollow centre with steady rings | Connected, but no handshake for over 3 minutes |
 
-## CLI
+- Only one tunnel is active at a time. Switching tunnels disconnects the current one first.
+- Quitting the app leaves the tunnel up on purpose. Reopen the app and it picks up the current state.
+- Scripting hooks (`PreUp`, `PostUp`, `PreDown`, `PostDown`) aren't supported. Configs that use them are rejected.
+
+### Command line
 
 ```bash
-wgbarctl ping | status | refresh | doctor
+wgbarctl ping
+```
+```bash
+wgbarctl status
 ```
 ```bash
 wgbarctl up <name> <file.conf>
@@ -85,42 +103,103 @@ wgbarctl up <name> <file.conf>
 ```bash
 wgbarctl down <name>
 ```
+```bash
+wgbarctl refresh
+```
+```bash
+wgbarctl doctor
+```
 
 ## Troubleshooting
 
-ดู log ของ helper แบบ realtime:
+| Problem | Fix |
+|---|---|
+| "Helper not running" banner | Reinstall the package, or run `sudo launchctl kickstart -k system/com.thanaboat.wgbar.helper` |
+| No handshake | Check the endpoint, port forwarding and firewall on the server. Test the same file with `sudo wg-quick up file.conf` to rule out the app. |
+| DNS not restored | The helper saves your original DNS in `/Library/Application Support/WGBar/state/` and restores it on its next start |
+| Conflicts with `wg-quick` | Run `wg-quick down` before using Wirelight |
+
+Watch the helper log live:
+
 ```bash
 log stream --predicate 'subsystem == "com.thanaboat.wgbar"'
 ```
-```bash
-sudo tail -f /var/log/wgbar-helper.log
+
+## How it works
+
+```
+Wirelight.app (SwiftUI menu bar)  ──JSON over Unix socket──▶  wgbar-helper (root LaunchDaemon)
+                                     /var/run/wgbar.sock         ├─ wireguard-go   creates utun
+                                                                 ├─ wg setconf     keys and peers
+                                                                 ├─ ifconfig/route addresses and routes
+                                                                 ├─ networksetup   DNS (restored on disconnect)
+                                                                 └─ /etc/resolver  split DNS
 ```
 
-| อาการ | วิธีแก้ |
-|---|---|
-| แอปขึ้นแถบเหลือง "Helper not installed" | รัน `./scripts/install-helper.sh` |
-| `wgbarctl doctor` ขึ้น FAIL ที่ helper responds | helper เป็นเวอร์ชันเก่า ให้รัน `install-helper.sh` ใหม่ |
-| ไม่มี handshake | เช็ค endpoint, port forward และ firewall ฝั่ง server ลองทดสอบด้วย `sudo wg-quick up file.conf` เพื่อแยกว่าปัญหาอยู่ที่แอปหรือที่ config |
-| DNS ไม่คืนค่าเดิม | helper เก็บค่าเดิมไว้ที่ `/Library/Application Support/WGBar/state/` และจะคืนให้เองตอน start รอบถัดไป |
-| ใช้ `wg-quick` ทดสอบด้วยแล้วชนกัน | ต้อง `wg-quick down` ก่อนใช้ Wirelight |
-
-## Uninstall
-
-ปิด tunnel ทุกตัวก่อน แล้วรัน:
-```bash
-./scripts/uninstall-helper.sh
-```
-จากนั้นลบ `Wirelight.app` ทิ้ง และลบ item `com.thanaboat.wgbar` ใน Keychain Access ถ้าต้องการ
+Wirelight uses a small root helper instead of a Network Extension, so it runs without a paid Apple Developer Program membership.
 
 ## Development
+
+### Requirements
+
+- macOS 13 or later, Xcode 15 or later
+- `brew install wireguard-tools wireguard-go xcodegen`
+
+### Layout
+
+| Path | What |
+|---|---|
+| `Sources/WGCore` | Config parser, validation, IPC models, socket client (shared) |
+| `Sources/wgbar-helper` | Root helper daemon |
+| `Sources/wgbarctl` | CLI |
+| `Tests/WGCoreTests` | Unit tests |
+| `App/` | SwiftUI app (XcodeGen `project.yml`) |
+| `installer/`, `scripts/` | Package installer, helper install scripts, icon generator |
+
+### Build and test
 
 ```bash
 swift build && swift test
 ```
+
+Run the app:
+
 ```bash
 cd App && xcodegen generate && open Wirelight.xcodeproj
 ```
+
+The app is signed ad-hoc by default. To sign with your own Apple Development identity, so Keychain "Always Allow" survives rebuilds:
+
+```bash
+cp App/Config/Local.xcconfig.example App/Config/Local.xcconfig
+```
+
+Then set `DEVELOPMENT_TEAM` in `App/Config/Local.xcconfig`. That file is git-ignored.
+
+Install the helper from source (it asks for your password):
+
+```bash
+./scripts/install-helper.sh
+```
+
+Build the installer package:
+
+```bash
+./scripts/build-pkg.sh 0.1.0
+```
+
+Regenerate the app icon:
+
 ```bash
 swift scripts/make-icons.swift .
 ```
-คำสั่งสุดท้ายใช้สร้าง App icon ใหม่
+
+### Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Issues labelled [good first issue](https://github.com/boatngin/wirelight/labels/good%20first%20issue) are a great place to start.
+
+## License
+
+[MIT](LICENSE). See [NOTICE.md](NOTICE.md) for trademarks and third-party software.
+
+"WireGuard" is a registered trademark of Jason A. Donenfeld. Wirelight is not affiliated with or endorsed by the WireGuard project.

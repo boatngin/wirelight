@@ -1,0 +1,9 @@
+// Default signing: "Sign to Run Locally" (ad-hoc) so anyone can build.
+// To sign with your own Apple Development identity (keeps Keychain
+// "Always Allow" across rebuilds), copy Local.xcconfig.example to
+// Local.xcconfig and set your team ID. Local.xcconfig is git-ignored.
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

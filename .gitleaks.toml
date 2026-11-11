@@ -1,0 +1,9 @@
+title = "Wirelight gitleaks config"
+
+[extend]
+useDefault = true
+
+# Unit tests use throwaway WireGuard keys generated with `wg genkey`.
+[allowlist]
+description = "Test-only WireGuard keys"
+paths = ['''^Tests/''']

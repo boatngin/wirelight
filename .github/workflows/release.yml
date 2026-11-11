@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Resolve version
+        id: v
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Test
+        run: swift test
+      - name: Build installer
+        run: scripts/build-pkg.sh "${{ steps.v.outputs.version }}"
+      - name: Zip app
+        run: |
+          ditto -c -k --keepParent build/DerivedData-release/Build/Products/Release/Wirelight.app \
+            "build/Wirelight-${{ steps.v.outputs.version }}.zip"
+          (cd build && shasum -a 256 "Wirelight-${{ steps.v.outputs.version }}.zip" > "Wirelight-${{ steps.v.outputs.version }}.zip.sha256")
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          FILES=(build/Wirelight.pkg "build/Wirelight-$VERSION.pkg" "build/Wirelight-$VERSION.pkg.sha256" \
+                 "build/Wirelight-$VERSION.zip" "build/Wirelight-$VERSION.zip.sha256")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" --title "Wirelight $VERSION" \
+              --generate-notes --notes-file .github/release-notes-header.md
+          fi
