@@ -3,8 +3,30 @@ import Foundation
 /// Socket path shared by helper and clients.
 public let wgbarSocketPath = "/var/run/wgbar.sock"
 
+/// Extra per-connection behaviour that is not part of a wg-quick config.
+public struct UpOptions: Codable, Equatable, Sendable {
+    /// Use the tunnel's DNS servers only for these domains (via /etc/resolver).
+    public var splitDNSDomains: [String]
+    /// CIDRs that keep using the physical default route even while connected.
+    public var excludedCIDRs: [String]
+
+    public init(splitDNSDomains: [String] = [], excludedCIDRs: [String] = []) {
+        self.splitDNSDomains = splitDNSDomains
+        self.excludedCIDRs = excludedCIDRs
+    }
+
+    /// Returns a description of the first invalid entry, or nil.
+    public func validationError() -> String? {
+        for d in splitDNSDomains where !Validation.isValidHostname(d) { return "invalid split DNS domain '\(d)'" }
+        for c in excludedCIDRs where !Validation.isValidCIDR(c) { return "invalid excluded CIDR '\(c)'" }
+        if splitDNSDomains.count > 64 || excludedCIDRs.count > 256 { return "too many entries" }
+        return nil
+    }
+}
+
 public enum Request: Codable, Equatable, Sendable {
     case up(name: String, config: String)
+    case upWithOptions(name: String, config: String, options: UpOptions)
     case down(name: String)
     case status
     case ping

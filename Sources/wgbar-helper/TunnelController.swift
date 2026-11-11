@@ -13,6 +13,10 @@ struct TunnelState: Codable {
     var full4: Bool?
     var full6: Bool?
     var dnsWanted: DNSSetting?
+    /// CIDRs routed via the physical default gateway (re-pinned on network change).
+    var excludedCIDRs: [String]?
+    /// /etc/resolver files we created for split DNS.
+    var resolverFiles: [String]?
 }
 
 enum TunnelError: Error, CustomStringConvertible {
@@ -66,7 +70,11 @@ final class TunnelController {
 
     // MARK: up
 
-    func up(name: String, configText: String) throws {
+    static let resolverDir = "/etc/resolver"
+    static let resolverMarker = "# managed by wgbar:"
+
+    func up(name: String, configText: String, options: UpOptions = UpOptions()) throws {
+        if let err = options.validationError() { throw TunnelError.interfaceStartFailed(err) }
         guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
         guard tunnels[name] == nil else { throw TunnelError.alreadyUp(name) }
         // Always re-validate: never trust the client.
@@ -85,6 +93,7 @@ final class TunnelController {
         log("\(name): wireguard-go started on \(utun)")
 
         var state = TunnelState(name: name, utun: utun)
+        state.excludedCIDRs = options.excludedCIDRs
         state.peerEndpoints = Dictionary(uniqueKeysWithValues: config.peers.compactMap { p in
             p.endpoint.map { (p.publicKey, $0) }
         })
@@ -99,7 +108,11 @@ final class TunnelController {
             try NetworkConfigurator.bringUp(utun)
 
             try addRoutes(config, state: &state)
-            try applyDNS(config, state: &state)
+            if options.splitDNSDomains.isEmpty {
+                try applyDNS(config, state: &state)
+            } else {
+                try applySplitDNS(config, domains: options.splitDNSDomains, state: &state)
+            }
             log("\(name): up on \(utun) (\(state.routes.count) routes, dns \(state.dnsBackup == nil ? "unchanged" : "set"))")
         } catch {
             log("\(name): up failed, rolling back: \(error)", error: true)
@@ -151,6 +164,13 @@ final class TunnelController {
 
     /// Host routes that keep endpoint traffic on the physical default route (full tunnel only).
     private func pinEndpoints(state: inout TunnelState) throws {
+        // Excluded CIDRs always go out the physical default route.
+        for cidr in state.excludedCIDRs ?? [] {
+            let fam = NetworkConfigurator.family(of: String(cidr.split(separator: "/")[0]))
+            guard let def = NetworkConfigurator.defaultRoute(family: fam), def.interface != state.utun else { continue }
+            try addRoute(RouteEntry(family: fam, destination: cidr, gateway: def.gateway,
+                                    interface: def.gateway == nil ? def.interface : nil), state: &state)
+        }
         let full4 = state.full4 ?? false, full6 = state.full6 ?? false
         guard full4 || full6 else { return }
         for ip in NetworkConfigurator.resolvedEndpointIPs(utun: state.utun) {
@@ -174,6 +194,35 @@ final class TunnelController {
         } catch let ShellError.failed(_, _, _, stderr) where stderr.contains("File exists") {
             log("\(state.name): route \(r.destination) already exists, skipping")
         }
+    }
+
+    /// Split DNS: one /etc/resolver/<domain> file per domain, pointing at the tunnel DNS.
+    private func applySplitDNS(_ config: WGConfig, domains: [String], state: inout TunnelState) throws {
+        let servers = config.interface.dns
+        guard !servers.isEmpty else { throw TunnelError.interfaceStartFailed("split DNS needs DNS servers in the config") }
+        try fm.createDirectory(atPath: Self.resolverDir, withIntermediateDirectories: true,
+                               attributes: [.posixPermissions: 0o755])
+        var files = state.resolverFiles ?? []
+        for domain in domains {
+            let d = domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let path = "\(Self.resolverDir)/\(d)"
+            // Never overwrite a resolver file someone else created.
+            if fm.fileExists(atPath: path), !isOurs(path, name: state.name) {
+                log("\(state.name): \(path) exists and is not ours, skipping", error: true)
+                continue
+            }
+            let body = "\(Self.resolverMarker)\(state.name)\n" + servers.map { "nameserver \($0)" }.joined(separator: "\n") + "\n"
+            try body.write(toFile: path, atomically: true, encoding: .utf8)
+            chmod(path, 0o644)
+            files.append(path)
+            state.resolverFiles = files
+            save(state)
+        }
+    }
+
+    private func isOurs(_ path: String, name: String) -> Bool {
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return false }
+        return text.hasPrefix("\(Self.resolverMarker)\(name)\n")
     }
 
     private func applyDNS(_ config: WGConfig, state: inout TunnelState) throws {
@@ -214,6 +263,9 @@ final class TunnelController {
                 catch { log("\(state.name): cannot restore DNS for '\(svc)': \(error)", error: true) }
             }
         }
+        for path in state.resolverFiles ?? [] where path.hasPrefix(Self.resolverDir + "/") && isOurs(path, name: state.name) {
+            unlink(path)
+        }
         for r in state.routes.reversed() { NetworkConfigurator.deleteRoute(r) }
         // Removing the UAPI socket makes wireguard-go exit and destroy the utun.
         unlink(uapiSocket(state.utun))
@@ -234,7 +286,7 @@ final class TunnelController {
                 catch { log("\(state.name): cannot re-resolve endpoint \(ep): \(error)", error: true) }
             }
 
-            if state.full4 == true || state.full6 == true {
+            if state.full4 == true || state.full6 == true || !(state.excludedCIDRs ?? []).isEmpty {
                 for r in state.routes where isEndpointRoute(r, utun: state.utun) { NetworkConfigurator.deleteRoute(r) }
                 state.routes.removeAll { isEndpointRoute($0, utun: state.utun) }
                 save(state)

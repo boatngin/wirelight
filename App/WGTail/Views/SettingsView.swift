@@ -16,6 +16,9 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { on in setLaunchAtLogin(on) }
+            Toggle("Connect the last used tunnel when the app starts", isOn: Binding(
+                get: { store.connectOnLaunch },
+                set: { store.connectOnLaunch = $0 }))
 
             Divider()
 

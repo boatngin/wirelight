@@ -52,6 +52,11 @@ wgbarctl doctor
 ข้อควรรู้:
 - config ทั้งไฟล์ (รวม private key) เก็บใน **Keychain** (`com.thanaboat.wgbar`) ส่วน UserDefaults เก็บแค่ชื่อและ endpoint
 - ไม่รองรับ `PreUp/PostUp/PreDown/PostDown` และ config ที่มี key พวกนี้จะ import ไม่ได้ เพื่อกันการรันคำสั่งด้วยสิทธิ์ root
+- **Split DNS**: ใช้ DNS ของ tunnel เฉพาะ domain ที่กำหนด เช่น `lan` ส่วนชื่ออื่นใช้ DNS ปกติ (helper สร้างไฟล์ใน `/etc/resolver/` และลบออกตอน disconnect)
+- **Split tunnel exclusions**: CIDR ที่กำหนดจะไม่วิ่งผ่าน tunnel แต่ใช้เน็ตปกติแทน แม้ตอนเปิด Route all traffic
+- **Test connection**: ping DNS server ของ tunnel (หรือ IP แรกใน AllowedIPs) เพื่อวัด latency
+- **Export…**: บันทึก config ออกเป็นไฟล์ (มี private key ไฟล์จะตั้งสิทธิ์ 600)
+- **Connect on launch** (ใน Settings): เปิดแอปแล้วต่อ tunnel ล่าสุดให้อัตโนมัติ
 - **Route all traffic** ส่งทุก traffic ผ่าน tunnel (`0.0.0.0/0, ::/0`)
 - ต่อได้ทีละ tunnel ถ้ากดเปลี่ยนไป tunnel อื่น ตัวเดิมจะปิดก่อน
 - Quit แอปแล้ว tunnel ยังทำงานต่อ (ตั้งใจให้เป็นแบบนี้) เปิดแอปใหม่สถานะจะตรงกับของจริง

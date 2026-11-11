@@ -8,6 +8,9 @@ struct TunnelDetailView: View {
     @Environment(\.openWindow) private var openWindow
     let profile: TunnelProfile
 
+    @State private var testResult: String?
+    @State private var testing = false
+
     private var isActive: Bool { store.active?.name == profile.name }
     private var config: WGConfig? { store.config(profile.name) }
     private var peer: PeerStatus? { isActive ? store.active?.peers.first : nil }
@@ -39,6 +42,23 @@ struct TunnelDetailView: View {
                         }
                         row("Received", Format.bytes(peer?.rxBytes ?? 0))
                         row("Sent", Format.bytes(peer?.txBytes ?? 0))
+                        HStack(spacing: 10) {
+                            Button {
+                                testing = true
+                                Task {
+                                    testResult = await store.testConnection(profile.name)
+                                    testing = false
+                                }
+                            } label: { Label("Test connection", systemImage: "waveform.path.ecg") }
+                            .disabled(testing)
+                            if testing { ProgressView().controlSize(.small) }
+                            if let testResult {
+                                Text(testResult).font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(testResult.contains("avg") ? Color.green : .orange)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .padding(.top, 4)
                     }
 
                     Divider().padding(.vertical, 16)
@@ -67,6 +87,32 @@ struct TunnelDetailView: View {
                 }
 
                 Divider().padding(.vertical, 16)
+                section("Split DNS") {
+                    Text("Use this tunnel's DNS only for these domains (for example lan or corp.example). Everything else keeps your normal DNS. Changes reconnect the tunnel.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    EditableList(items: profile.splitDNSDomains, placeholder: "Domain, e.g. lan",
+                                 icon: "network", validate: Validation.isValidHostname) { list in
+                        Task { await store.setSplitDNS(list, for: profile.name) }
+                    }
+                    if !profile.splitDNSDomains.isEmpty && (config?.interface.dns.isEmpty ?? true) {
+                        Text("This config has no DNS server, so split DNS can't be used.")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                }
+
+                Divider().padding(.vertical, 16)
+                section("Split tunnel exclusions") {
+                    Text("Traffic to these ranges skips the tunnel and uses your normal connection, even while connected. Changes reconnect the tunnel.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    EditableList(items: profile.excludedCIDRs, placeholder: "CIDR, e.g. 10.0.5.0/24",
+                                 icon: "arrow.triangle.branch", validate: Validation.isValidCIDR) { list in
+                        Task { await store.setExclusions(list, for: profile.name) }
+                    }
+                }
+
+                Divider().padding(.vertical, 16)
                 section("Configuration") {
                     row("Stored in", "Keychain · com.thanaboat.wgbar")
                     row("Created", profile.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "-")
@@ -77,6 +123,7 @@ struct TunnelDetailView: View {
                         }
                         Button { openWindow(id: "settings") } label: { Label("Edit", systemImage: "pencil") }
                         Button { copyPublicKey() } label: { Label("Copy peer key", systemImage: "doc.on.doc") }
+                        Button { exportConfig() } label: { Label("Export…", systemImage: "square.and.arrow.up") }
                     }
                     .padding(.top, 6)
                 }
@@ -139,6 +186,22 @@ struct TunnelDetailView: View {
     private var dns: String {
         let all = (config?.interface.dns ?? []) + (config?.interface.dnsSearch ?? [])
         return all.isEmpty ? "-" : all.joined(separator: ", ")
+    }
+
+    /// Saves the full config (including the private key) to a file the user picks.
+    private func exportConfig() {
+        guard let text = store.configText(profile.name) else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(profile.name).conf"
+        panel.message = "The exported file contains your private key. Keep it safe."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            store.addLog("Exported \(profile.name) to \(url.path)")
+        } catch {
+            store.addLog("Export failed: \(error.localizedDescription)", isError: true)
+        }
     }
 
     private func copyPublicKey() {
