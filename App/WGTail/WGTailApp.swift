@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct WGBarApp: App {
+struct WGTailApp: App {
     @StateObject private var store = TunnelStore()
 
     var body: some Scene {
@@ -13,7 +13,7 @@ struct WGBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("WGBar", id: "main") {
+        Window("WGTail", id: "main") {
             MainWindow()
                 .environmentObject(store)
         }
@@ -25,7 +25,7 @@ struct WGBarApp: App {
         }
         .windowResizability(.contentSize)
 
-        Window("WGBar Settings", id: "settings") {
+        Window("WGTail Settings", id: "settings") {
             SettingsView()
                 .environmentObject(store)
         }
