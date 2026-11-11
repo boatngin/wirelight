@@ -7,6 +7,12 @@ struct TunnelState: Codable {
     var routes: [RouteEntry] = []
     /// Original DNS per network service; nil when the config set no DNS.
     var dnsBackup: [String: DNSSetting]?
+    // Added in phase 7 (optional so older state files still decode).
+    /// Peer public key -> endpoint as written in the config (may be a hostname).
+    var peerEndpoints: [String: String]?
+    var full4: Bool?
+    var full6: Bool?
+    var dnsWanted: DNSSetting?
 }
 
 enum TunnelError: Error, CustomStringConvertible {
@@ -79,6 +85,9 @@ final class TunnelController {
         log("\(name): wireguard-go started on \(utun)")
 
         var state = TunnelState(name: name, utun: utun)
+        state.peerEndpoints = Dictionary(uniqueKeysWithValues: config.peers.compactMap { p in
+            p.endpoint.map { (p.publicKey, $0) }
+        })
         save(state) // persist immediately so a crash mid-setup can be cleaned up
 
         do {
@@ -127,21 +136,10 @@ final class TunnelController {
     private func addRoutes(_ config: WGConfig, state: inout TunnelState) throws {
         var allowed: [String] = []
         for cidr in config.peers.flatMap(\.allowedIPs) where !allowed.contains(cidr) { allowed.append(cidr) }
-        let full4 = allowed.contains("0.0.0.0/0")
-        let full6 = allowed.contains("::/0")
-
+        state.full4 = allowed.contains("0.0.0.0/0")
+        state.full6 = allowed.contains("::/0")
         // Full tunnel: pin each endpoint to the original default gateway first.
-        if full4 || full6 {
-            for ip in NetworkConfigurator.resolvedEndpointIPs(utun: state.utun) {
-                let fam = NetworkConfigurator.family(of: ip)
-                guard (fam == "inet" && full4) || (fam == "inet6" && full6),
-                      let def = NetworkConfigurator.defaultRoute(family: fam),
-                      def.interface != state.utun else { continue }
-                let r = RouteEntry(family: fam, destination: ip, gateway: def.gateway,
-                                   interface: def.gateway == nil ? def.interface : nil)
-                try addRoute(r, state: &state)
-            }
-        }
+        try pinEndpoints(state: &state)
 
         for cidr in allowed {
             let fam = NetworkConfigurator.family(of: String(cidr.split(separator: "/")[0]))
@@ -150,6 +148,23 @@ final class TunnelController {
             }
         }
     }
+
+    /// Host routes that keep endpoint traffic on the physical default route (full tunnel only).
+    private func pinEndpoints(state: inout TunnelState) throws {
+        let full4 = state.full4 ?? false, full6 = state.full6 ?? false
+        guard full4 || full6 else { return }
+        for ip in NetworkConfigurator.resolvedEndpointIPs(utun: state.utun) {
+            let fam = NetworkConfigurator.family(of: ip)
+            guard (fam == "inet" && full4) || (fam == "inet6" && full6),
+                  let def = NetworkConfigurator.defaultRoute(family: fam),
+                  def.interface != state.utun else { continue }
+            let r = RouteEntry(family: fam, destination: ip, gateway: def.gateway,
+                               interface: def.gateway == nil ? def.interface : nil)
+            try addRoute(r, state: &state)
+        }
+    }
+
+    private func isEndpointRoute(_ r: RouteEntry, utun: String) -> Bool { r.interface != utun }
 
     private func addRoute(_ r: RouteEntry, state: inout TunnelState) throws {
         do {
@@ -174,6 +189,8 @@ final class TunnelController {
         save(state) // backup must be on disk before we change anything
 
         let wanted = DNSSetting(servers: iface.dns, searchDomains: iface.dnsSearch)
+        state.dnsWanted = wanted
+        save(state)
         for svc in backup.keys.sorted() {
             do { try NetworkConfigurator.apply(wanted, to: svc) }
             catch { log("\(state.name): cannot set DNS for '\(svc)': \(error)", error: true) }
@@ -203,6 +220,91 @@ final class TunnelController {
         unlink(nameFile(state.name))
         unlink(statePath(state.name))
         tunnels[state.name] = nil
+    }
+
+    // MARK: refresh (wake / network change)
+
+    /// Re-resolves hostname endpoints, re-pins endpoint host routes to the current
+    /// default gateway and applies tunnel DNS to network services that appeared later.
+    func refresh() {
+        for var state in tunnels.values.sorted(by: { $0.name < $1.name }) {
+            for (pk, ep) in (state.peerEndpoints ?? [:]).sorted(by: { $0.key < $1.key })
+            where Validation.isValidKey(pk) && Validation.isValidEndpoint(ep) {
+                do { try Shell.run(.wg, ["set", state.utun, "peer", pk, "endpoint", ep]) }
+                catch { log("\(state.name): cannot re-resolve endpoint \(ep): \(error)", error: true) }
+            }
+
+            if state.full4 == true || state.full6 == true {
+                for r in state.routes where isEndpointRoute(r, utun: state.utun) { NetworkConfigurator.deleteRoute(r) }
+                state.routes.removeAll { isEndpointRoute($0, utun: state.utun) }
+                save(state)
+                do { try pinEndpoints(state: &state) }
+                catch { log("\(state.name): cannot re-pin endpoint routes: \(error)", error: true) }
+            }
+
+            if let wanted = state.dnsWanted, var backup = state.dnsBackup,
+               let services = try? NetworkConfigurator.networkServices() {
+                for svc in services where backup[svc] == nil {
+                    guard let original = try? NetworkConfigurator.currentDNS(service: svc) else { continue }
+                    backup[svc] = original
+                    state.dnsBackup = backup
+                    save(state)
+                    do {
+                        try NetworkConfigurator.apply(wanted, to: svc)
+                        log("\(state.name): applied tunnel DNS to new service '\(svc)'")
+                    } catch { log("\(state.name): cannot set DNS for '\(svc)': \(error)", error: true) }
+                }
+            }
+            log("\(state.name): refreshed")
+        }
+    }
+
+    private var lastNetworkSignature: String?
+
+    /// Called periodically; triggers `refresh()` when the default route changes.
+    func checkNetworkChange() {
+        guard !tunnels.isEmpty else { lastNetworkSignature = nil; return }
+        let sig = ["inet", "inet6"].map { fam -> String in
+            guard let d = NetworkConfigurator.defaultRoute(family: fam) else { return "\(fam):-" }
+            return "\(fam):\(d.gateway ?? "")@\(d.interface ?? "")"
+        }.joined(separator: " ")
+        defer { lastNetworkSignature = sig }
+        if let last = lastNetworkSignature, last != sig {
+            log("default route changed (\(last) -> \(sig)), refreshing")
+            refresh()
+        }
+    }
+
+    // MARK: doctor
+
+    func doctor() -> [String] {
+        var out: [String] = []
+        for tool in [Tool.wireguardGo, .wg, .ifconfig, .route, .networksetup] {
+            if let url = try? Shell.resolve(tool) {
+                var note = ""
+                if let attrs = try? fm.attributesOfItem(atPath: url.resolvingSymlinksInPath().path),
+                   let owner = attrs[.ownerAccountID] as? NSNumber, owner.intValue != 0 {
+                    note = " (not root-owned: a local user could replace it)"
+                }
+                out.append("ok    \(tool.rawValue): \(url.path)\(note)")
+            } else {
+                out.append("FAIL  \(tool.rawValue): not found")
+            }
+        }
+        let tracked = Set(tunnels.values.map(\.utun))
+        for s in tunnels.values.sorted(by: { $0.name < $1.name }) {
+            let alive = fm.fileExists(atPath: uapiSocket(s.utun))
+            out.append("\(alive ? "ok  " : "FAIL")  tunnel \(s.name) on \(s.utun)\(alive ? "" : " (control socket missing)")")
+        }
+        let socks = ((try? fm.contentsOfDirectory(atPath: Self.runDir)) ?? []).filter { $0.hasSuffix(".sock") }
+        for sock in socks.sorted() {
+            let utun = String(sock.dropLast(5))
+            if !tracked.contains(utun) {
+                out.append("warn  \(utun) has a wireguard socket but is not managed by wgbar (wg-quick? leftover?)")
+            }
+        }
+        if tunnels.isEmpty { out.append("ok    no active tunnels") }
+        return out
     }
 
     // MARK: status / recovery

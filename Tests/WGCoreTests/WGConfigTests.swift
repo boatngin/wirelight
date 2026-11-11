@@ -143,7 +143,7 @@ final class ValidationTests: XCTestCase {
 
 final class IPCTests: XCTestCase {
     func testRoundTrip() throws {
-        let reqs: [Request] = [.up(name: "home", config: "x"), .down(name: "home"), .status, .ping]
+        let reqs: [Request] = [.up(name: "home", config: "x"), .down(name: "home"), .status, .ping, .refresh, .doctor]
         for r in reqs { XCTAssertEqual(try IPCFraming.decode(Request.self, from: IPCFraming.encode(r)), r) }
 
         let resp = Response(ok: true, status: [TunnelStatus(name: "home", interface: "utun5", peers: [

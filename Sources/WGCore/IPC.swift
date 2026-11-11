@@ -8,6 +8,10 @@ public enum Request: Codable, Equatable, Sendable {
     case down(name: String)
     case status
     case ping
+    /// Re-resolve endpoints, re-pin endpoint routes and re-apply DNS (after wake / network change).
+    case refresh
+    /// Helper-side diagnostics, returned in `Response.messages`.
+    case doctor
 }
 
 public struct PeerStatus: Codable, Equatable, Sendable {
@@ -38,9 +42,10 @@ public struct Response: Codable, Equatable, Sendable {
     public var ok: Bool
     public var error: String?
     public var status: [TunnelStatus]?
+    public var messages: [String]?
 
-    public init(ok: Bool, error: String? = nil, status: [TunnelStatus]? = nil) {
-        self.ok = ok; self.error = error; self.status = status
+    public init(ok: Bool, error: String? = nil, status: [TunnelStatus]? = nil, messages: [String]? = nil) {
+        self.ok = ok; self.error = error; self.status = status; self.messages = messages
     }
     public static func failure(_ msg: String) -> Response { Response(ok: false, error: msg) }
 }
