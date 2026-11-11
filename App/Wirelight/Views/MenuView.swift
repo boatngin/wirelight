@@ -247,9 +247,7 @@ struct MenuView: View {
         }
     }
 
-    private func rate(_ bps: Double) -> String {
-        "\(ByteCountFormatter.string(fromByteCount: Int64(bps), countStyle: .binary))/s"
-    }
+    private func rate(_ bps: Double) -> String { Format.rate(bps) }
 
     private func duration(_ t: TimeInterval) -> String {
         let s = max(0, Int(t))

@@ -21,6 +21,10 @@ h1{font-size:44px;line-height:1.1;margin:16px 0 8px;letter-spacing:-.02em}
 .btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent}
 .btn.ghost{color:var(--fg);background:var(--card)}
 .meta{color:var(--muted);font-size:13px;margin-top:12px}
+.shots{display:flex;gap:16px;justify-content:center;align-items:flex-start;margin:48px 0 0;flex-wrap:wrap}
+.shots img{border-radius:14px;border:1px solid var(--line);box-shadow:0 12px 40px rgba(0,0,0,.18);max-width:100%;height:auto}
+.shots .menu{width:280px}
+.shots .dash{width:520px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:56px 0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
 .card h3{margin:0 0 6px;font-size:16px}
@@ -46,6 +50,11 @@ a{color:inherit}
       <a class="btn ghost" href="https://github.com/boatngin/wirelight">View on GitHub</a>
     </div>
     <p class="meta">macOS 13 or later · Apple silicon and Intel · MIT License</p>
+  </section>
+
+  <section class="shots">
+    <img class="menu" src="assets/screenshots/menu.png" width="310" height="605" alt="Wirelight menu bar dashboard with live speed, handshake, uptime and a traffic chart">
+    <img class="dash" src="assets/screenshots/dashboard.png" width="891" height="648" alt="Wirelight dashboard window with a tunnel list, details and a traffic chart">
   </section>
 
   <section class="grid">

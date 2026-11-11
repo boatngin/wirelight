@@ -4,6 +4,12 @@
 
 [English](README.md)
 
+<p align="center">
+  <img src="docs/assets/screenshots/menu.png" width="300" alt="เมนู Wirelight บน menu bar">
+  &nbsp;&nbsp;
+  <img src="docs/assets/screenshots/dashboard.png" width="520" alt="หน้าต่าง Dashboard ของ Wirelight">
+</p>
+
 ## ความสามารถ
 
 - **Dashboard บน menu bar**: เปิดปิด tunnel ได้ด้วยสวิตช์เดียว ดูความเร็ว ↓↑, handshake, uptime และกราฟ traffic 60 วินาทีได้สด ๆ
