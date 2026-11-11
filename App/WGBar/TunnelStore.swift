@@ -37,7 +37,11 @@ final class TunnelStore: ObservableObject {
     @Published private(set) var profiles: [TunnelProfile] = []
     @Published private(set) var active: TunnelStatus?
     @Published private(set) var helperReachable = true
-    @Published private(set) var busy = false
+    @Published private(set) var busy = false {
+        didSet { busy ? startIconAnimation() : stopIconAnimation() }
+    }
+    @Published private(set) var iconFrame = 0
+    private var iconTimer: Timer?
     @Published var lastError: String?
     @Published var selectedName: String? {
         didSet { UserDefaults.standard.set(selectedName, forKey: Keys.selected) }
@@ -100,6 +104,24 @@ final class TunnelStore: ObservableObject {
     }
 
     var isConnected: Bool { active != nil }
+
+    var iconState: IconState {
+        if busy { return .connecting(frame: iconFrame) }
+        guard isConnected else { return .disconnected }
+        return isHandshakeStale ? .stale : .connected
+    }
+
+    private func startIconAnimation() {
+        guard iconTimer == nil else { return }
+        iconTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.iconFrame += 1 }
+        }
+    }
+
+    private func stopIconAnimation() {
+        iconTimer?.invalidate()
+        iconTimer = nil
+    }
     func profile(_ name: String) -> TunnelProfile? { profiles.first { $0.name == name } }
     var activeProfile: TunnelProfile? { active.flatMap { profile($0.name) } }
     var currentProfile: TunnelProfile? { activeProfile ?? selectedName.flatMap(profile) ?? profiles.first }
