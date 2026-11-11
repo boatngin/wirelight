@@ -120,7 +120,15 @@ final class TunnelStore: ObservableObject {
     private var wakeObserver: NSObjectProtocol?
     private var notifiedStale = false
 
+    /// Demo mode (`WIRELIGHT_DEMO=1`): sample data for screenshots, no helper,
+    /// Keychain or UserDefaults access.
+    static let isDemo = ProcessInfo.processInfo.environment["WIRELIGHT_DEMO"] == "1"
+
     init() {
+        if Self.isDemo {
+            loadDemo()
+            return
+        }
         loadProfiles()
         selectedName = UserDefaults.standard.string(forKey: Keys.selected) ?? profiles.first?.name
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -206,6 +214,7 @@ final class TunnelStore: ObservableObject {
     }
 
     func refresh() async {
+        if Self.isDemo { return }
         guard !busy else { return }
         do {
             let r = try await HelperClient.send(.status)
@@ -236,6 +245,7 @@ final class TunnelStore: ObservableObject {
     }
 
     func connect(_ name: String) async {
+        if Self.isDemo { return }
         guard !busy, active?.name != name else { return }
         busy = true
         lastError = nil
@@ -269,6 +279,7 @@ final class TunnelStore: ObservableObject {
     }
 
     func disconnect() async {
+        if Self.isDemo { return }
         guard !busy, let current = active else { return }
         busy = true
         lastError = nil
@@ -455,7 +466,57 @@ final class TunnelStore: ObservableObject {
         }
     }
 
+    private func loadDemo() {
+        // Throwaway keys generated with `wg genkey`; documentation IP ranges only.
+        let peers = ["hmSEV1i3X4AQyQpOeoMwt2DQEa+0nu5ZS3v5JSSrYFQ=", "v6jlChyb6k6nARaW+0zmEqB2GdLXK9ZTC2dtEAHrNV4=",
+                     "Uw6SpKDvoZIawVvCNlXqkeaYQ8N4CguZXSHT/19BTFs="]
+        let demos: [(String, String, String, String)] = [
+            ("home", "vpn.example.com:51820", "10.8.0.2/32", "192.168.1.0/24, 10.8.0.0/24"),
+            ("office", "198.51.100.20:51820", "10.20.0.7/32", "10.20.0.0/16"),
+            ("tokyo-vps", "203.0.113.45:51820", "10.66.0.2/32", "0.0.0.0/0, ::/0"),
+        ]
+        for (i, d) in demos.enumerated() {
+            let text = """
+            [Interface]
+            PrivateKey = aJZAOjSd91Y8ZUTmknBlNoqDd/yEMhr6u+lNsOSQ7Xo=
+            Address = \(d.2)
+            DNS = 10.8.0.1
+            [Peer]
+            PublicKey = \(peers[i])
+            Endpoint = \(d.1)
+            AllowedIPs = \(d.3)
+            PersistentKeepalive = 25
+            """
+            if let cfg = try? WGConfig(parsing: text) { configs[d.0] = cfg }
+            profiles.append(TunnelProfile(name: d.0, endpoint: d.1, addresses: [d.2], favorite: i == 0,
+                                          createdAt: Date().addingTimeInterval(-86400 * Double(30 - i * 7))))
+        }
+        profiles[0].splitDNSDomains = ["lan", "home.arpa"]
+        profiles[0].excludedCIDRs = ["192.168.1.50/32"]
+        selectedName = "home"
+        mainSelection = "home"
+        let now = Date()
+        let demoSamples: [TrafficSample] = (0..<30).map { i in
+            let t = Double(i)
+            return TrafficSample(date: now.addingTimeInterval(-58 + t * 2),
+                                 rx: max(0, 180_000 + 140_000 * sin(t / 3.2) + 60_000 * sin(t * 1.7)),
+                                 tx: max(0, 40_000 + 30_000 * sin(t / 2.5 + 1) + 15_000 * cos(t * 1.3)))
+        }
+        lastCounters = nil
+        active = TunnelStatus(name: "home", interface: "utun7", peers: [
+            PeerStatus(publicKey: peers[0], endpoint: "203.0.113.10:51820",
+                       latestHandshake: now.addingTimeInterval(-12),
+                       rxBytes: 1_284_000_000, txBytes: 214_500_000,
+                       allowedIPs: ["192.168.1.0/24", "10.8.0.0/24"])])
+        samples = demoSamples
+        connectedSince = now.addingTimeInterval(-(3600 * 2 + 1260))
+        addLog("Imported home")
+        addLog("Connected home")
+        addLog("Test home: 10.8.0.1: avg 18.4 ms · 0.0% packet loss")
+    }
+
     private func saveProfiles() {
+        if Self.isDemo { return }
         if let data = try? JSONEncoder().encode(profiles) {
             UserDefaults.standard.set(data, forKey: Keys.profiles)
         }
@@ -481,8 +542,17 @@ enum Format {
         return "\(s / 86400)d ago"
     }
 
-    static func bytes(_ n: UInt64) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(clamping: n), countStyle: .binary)
+    private static let byteFormatter: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.countStyle = .binary
+        f.allowsNonnumericFormatting = false   // "0 bytes", never "Zero KB"
+        return f
+    }()
+
+    static func bytes(_ n: UInt64) -> String { byteFormatter.string(fromByteCount: Int64(clamping: n)) }
+
+    static func rate(_ bps: Double) -> String {
+        bps < 1 ? "0 B/s" : "\(byteFormatter.string(fromByteCount: Int64(bps)))/s"
     }
 
     static func ip(_ cidr: String) -> String { String(cidr.split(separator: "/").first ?? "") }

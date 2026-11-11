@@ -20,6 +20,12 @@
 
 ---
 
+<p align="center">
+  <img src="docs/assets/screenshots/menu.png" width="300" alt="Wirelight menu bar dashboard showing a connected tunnel with live download and upload speed, handshake, uptime and a traffic chart">
+  &nbsp;&nbsp;
+  <img src="docs/assets/screenshots/dashboard.png" width="520" alt="Wirelight dashboard window listing three tunnels with details, live stats and a 60-second traffic chart">
+</p>
+
 ## Features
 
 - **Menu bar dashboard**: connect with one switch and watch live download and upload, handshake age, uptime and a 60-second traffic chart.
