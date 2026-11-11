@@ -13,6 +13,8 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var routeAll: Bool = false
     var favorite: Bool = false
     var createdAt: Date?
+    var splitDNSDomains: [String] = []
+    var excludedCIDRs: [String] = []
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -30,7 +32,11 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         routeAll = try c.decodeIfPresent(Bool.self, forKey: .routeAll) ?? false
         favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite) ?? false
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        splitDNSDomains = try c.decodeIfPresent([String].self, forKey: .splitDNSDomains) ?? []
+        excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
     }
+
+    var upOptions: UpOptions { UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs) }
 }
 
 /// One traffic sample (bytes/second) derived from successive status polls.
@@ -116,6 +122,7 @@ final class TunnelStore: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         startPolling()
         watchSystemEvents()
+        Task { await autoConnectIfNeeded() }
     }
 
     // MARK: Wake / network change
@@ -241,7 +248,11 @@ final class TunnelStore: ObservableObject {
                 if !cfg.peers.isEmpty { cfg.peers[0].allowedIPs = ["0.0.0.0/0", "::/0"] }
                 text = cfg.wgQuickText()
             }
-            let r = try check(await HelperClient.send(.up(name: name, config: text), timeout: 30))
+            let options = profile(name)?.upOptions ?? UpOptions()
+            let request: Request = (options.splitDNSDomains.isEmpty && options.excludedCIDRs.isEmpty)
+                ? .up(name: name, config: text)
+                : .upWithOptions(name: name, config: text, options: options)
+            let r = try check(await HelperClient.send(request, timeout: 30))
             active = r.status?.first { $0.name == name }
             selectedName = name
             notifiedStale = false
@@ -325,6 +336,83 @@ final class TunnelStore: ObservableObject {
         for p in list {
             if let text = KeychainStore.load(p.name), let c = try? WGConfig(parsing: text) { configs[p.name] = c }
         }
+    }
+
+    // MARK: Per-tunnel options (applied on next connect; reconnects if active)
+
+    func setSplitDNS(_ domains: [String], for name: String) async {
+        await updateProfile(name) { $0.splitDNSDomains = domains }
+    }
+
+    func setExclusions(_ cidrs: [String], for name: String) async {
+        await updateProfile(name) { $0.excludedCIDRs = cidrs }
+    }
+
+    private func updateProfile(_ name: String, _ change: (inout TunnelProfile) -> Void) async {
+        guard let i = profiles.firstIndex(where: { $0.name == name }) else { return }
+        change(&profiles[i])
+        saveProfiles()
+        if active?.name == name {
+            await disconnect()
+            await connect(name)
+        }
+    }
+
+    // MARK: Connect on launch
+
+    static let connectOnLaunchKey = "connectOnLaunch"
+    var connectOnLaunch: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.connectOnLaunchKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.connectOnLaunchKey); objectWillChange.send() }
+    }
+
+    private func autoConnectIfNeeded() async {
+        await refresh()
+        guard connectOnLaunch, helperReachable, !isConnected, let name = currentProfile?.name else { return }
+        addLog("Connecting \(name) at launch")
+        await connect(name)
+    }
+
+    // MARK: Test connection
+
+    /// Pings a host that should only be reachable through the tunnel.
+    func testTarget(for name: String) -> String? {
+        guard let cfg = config(name) else { return nil }
+        if let dns = cfg.interface.dns.first { return dns }
+        for cidr in cfg.peers.flatMap(\.allowedIPs) where !cidr.hasSuffix("/0") {
+            let ip = Format.ip(cidr)
+            let parts = ip.split(separator: ".").compactMap { Int($0) }
+            if parts.count == 4 { return "\(parts[0]).\(parts[1]).\(parts[2]).\(parts[3] == 0 ? 1 : parts[3])" }
+        }
+        return nil
+    }
+
+    func testConnection(_ name: String) async -> String {
+        guard let target = testTarget(for: name) else { return "No test target (config has no DNS or private AllowedIPs)" }
+        let result: String = await withCheckedContinuation { cont in
+            DispatchQueue.global().async {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/sbin/ping")
+                p.arguments = ["-c", "3", "-t", "5", "-q", target]
+                let out = Pipe()
+                p.standardOutput = out
+                p.standardError = out
+                do { try p.run() } catch { cont.resume(returning: "ping failed: \(error.localizedDescription)"); return }
+                let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                p.waitUntilExit()
+                if let line = text.split(separator: "\n").first(where: { $0.contains("min/avg/max") }),
+                   let nums = line.split(separator: "=").last?.split(separator: "/"), nums.count >= 2 {
+                    let loss = text.split(separator: "\n").first(where: { $0.contains("packet loss") })
+                        .flatMap { $0.split(separator: ",").first(where: { $0.contains("loss") }) }
+                        .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+                    cont.resume(returning: "\(target): avg \(nums[1].trimmingCharacters(in: .whitespaces)) ms · \(loss)")
+                } else {
+                    cont.resume(returning: "\(target): no reply")
+                }
+            }
+        }
+        addLog("Test \(name): \(result)", isError: result.contains("no reply") || result.contains("failed"))
+        return result
     }
 
     func toggleFavorite(_ name: String) {

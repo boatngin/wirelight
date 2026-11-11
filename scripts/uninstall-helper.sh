@@ -25,6 +25,10 @@ sudo rm -f /usr/local/bin/wgbarctl
 sudo rm -f /var/run/wgbar.sock
 sudo rm -f /var/log/wgbar-helper.log
 sudo rm -rf "/Library/Application Support/WGBar"
+# Split DNS resolver files created by the helper (identified by their marker line)
+for f in /etc/resolver/*; do
+    [[ -f "$f" ]] && head -1 "$f" | grep -q '^# managed by wgbar:' && sudo rm -f "$f"
+done
 # Only our own leftovers in the shared wireguard run dir
 sudo find /var/run/wireguard -maxdepth 1 \( -name '*.name' -o -name '*.setconf' \) -delete 2>/dev/null || true
 sudo rmdir /var/run/wireguard 2>/dev/null || true

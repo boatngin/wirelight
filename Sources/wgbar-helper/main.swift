@@ -53,6 +53,10 @@ func handle(_ request: Request) -> Response {
             return Response(ok: true, status: controller.status())
         case .doctor:
             return Response(ok: true, messages: controller.doctor())
+        case let .upWithOptions(name, config, options):
+            log("request: up \(name) (split DNS: \(options.splitDNSDomains.count), exclusions: \(options.excludedCIDRs.count))")
+            try controller.up(name: name, configText: config, options: options)
+            return Response(ok: true, status: controller.status())
         case let .down(name):
             log("request: down \(name)")
             try controller.down(name: name)

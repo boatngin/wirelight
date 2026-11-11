@@ -143,7 +143,8 @@ final class ValidationTests: XCTestCase {
 
 final class IPCTests: XCTestCase {
     func testRoundTrip() throws {
-        let reqs: [Request] = [.up(name: "home", config: "x"), .down(name: "home"), .status, .ping, .refresh, .doctor]
+        let reqs: [Request] = [.up(name: "home", config: "x"), .down(name: "home"), .status, .ping, .refresh, .doctor,
+            .upWithOptions(name: "home", config: "x", options: UpOptions(splitDNSDomains: ["lan"], excludedCIDRs: ["10.0.5.0/24"]))]
         for r in reqs { XCTAssertEqual(try IPCFraming.decode(Request.self, from: IPCFraming.encode(r)), r) }
 
         let resp = Response(ok: true, status: [TunnelStatus(name: "home", interface: "utun5", peers: [
@@ -152,6 +153,13 @@ final class IPCTests: XCTestCase {
         let frame = try IPCFraming.encode(resp)
         XCTAssertEqual(try IPCFraming.length(fromHeader: frame), frame.count - 4)
         XCTAssertEqual(try IPCFraming.decode(Response.self, from: frame), resp)
+    }
+
+    func testUpOptionsValidation() {
+        XCTAssertNil(UpOptions(splitDNSDomains: ["lan", "corp.example"], excludedCIDRs: ["10.0.5.0/24"]).validationError())
+        XCTAssertNotNil(UpOptions(splitDNSDomains: ["../etc/passwd"]).validationError())
+        XCTAssertNotNil(UpOptions(splitDNSDomains: ["a b"]).validationError())
+        XCTAssertNotNil(UpOptions(excludedCIDRs: ["10.0.0.1"]).validationError())
     }
 
     func testOversizedHeaderRejected() {
