@@ -41,7 +41,9 @@ wgbarctl doctor
 ```
 ได้ไฟล์ `build/WGTail-<version>.zip` ให้แตกไฟล์แล้วลาก `WGTail.app` ไปไว้ที่ `/Applications`
 
-ถ้าจะ sign ด้วย Personal Team ให้ใส่ `DEVELOPMENT_TEAM` ใน `App/project.yml` ถ้าไม่ใส่จะ sign แบบ ad-hoc ซึ่งใช้งานได้ แต่ทุกครั้งที่ build ใหม่ Keychain จะถามสิทธิ์อีกรอบ
+แอป sign ด้วย Apple Development (Personal Team) ใน `App/project.yml` เพื่อให้ Keychain จำสิทธิ์ได้ข้ามการ build ใหม่ ถ้าจะใช้บัญชีอื่นให้แก้ `DEVELOPMENT_TEAM`
+
+ถ้า macOS ถามรหัส Keychain ให้กด **Always Allow** ครั้งเดียวต่อ tunnel แล้วจะไม่ถามอีก
 
 ## 3. Import config
 

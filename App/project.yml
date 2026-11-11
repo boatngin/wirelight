@@ -28,7 +28,7 @@ targets:
         MARKETING_VERSION: "0.1.0"
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
-        # Set your Personal Team ID here (or in Xcode > Signing). Empty = sign to run locally.
+        # Stable signing identity so Keychain "Always Allow" survives rebuilds.
         DEVELOPMENT_TEAM: ""
         CODE_SIGN_IDENTITY: "-"
         ENABLE_APP_SANDBOX: NO
