@@ -193,10 +193,8 @@ public struct WGConfig: Equatable, Sendable {
         return p
     }
 
-    /// Text accepted by `wg setconf`: only keys wg itself understands (no Address/DNS/MTU).
-    public func wgSetconfText() -> String {
-        var out = ["[Interface]", "PrivateKey = \(interface.privateKey)"]
-        if let lp = interface.listenPort { out.append("ListenPort = \(lp)") }
+    private func peerLines() -> [String] {
+        var out: [String] = []
         for p in peers {
             out.append("")
             out.append("[Peer]")
@@ -206,6 +204,24 @@ public struct WGConfig: Equatable, Sendable {
             if !p.allowedIPs.isEmpty { out.append("AllowedIPs = \(p.allowedIPs.joined(separator: ", "))") }
             if let k = p.persistentKeepalive { out.append("PersistentKeepalive = \(k)") }
         }
-        return out.joined(separator: "\n") + "\n"
+        return out
+    }
+
+    /// Text accepted by `wg setconf`: only keys wg itself understands (no Address/DNS/MTU).
+    public func wgSetconfText() -> String {
+        var out = ["[Interface]", "PrivateKey = \(interface.privateKey)"]
+        if let lp = interface.listenPort { out.append("ListenPort = \(lp)") }
+        return (out + peerLines()).joined(separator: "\n") + "\n"
+    }
+
+    /// Full wg-quick style text (round-trips through `init(parsing:)`).
+    public func wgQuickText() -> String {
+        var out = ["[Interface]", "PrivateKey = \(interface.privateKey)",
+                   "Address = \(interface.addresses.joined(separator: ", "))"]
+        let dns = interface.dns + interface.dnsSearch
+        if !dns.isEmpty { out.append("DNS = \(dns.joined(separator: ", "))") }
+        if let m = interface.mtu { out.append("MTU = \(m)") }
+        if let lp = interface.listenPort { out.append("ListenPort = \(lp)") }
+        return (out + peerLines()).joined(separator: "\n") + "\n"
     }
 }

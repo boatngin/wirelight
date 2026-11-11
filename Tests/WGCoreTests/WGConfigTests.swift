@@ -96,6 +96,11 @@ final class WGConfigTests: XCTestCase {
         XCTAssertThrowsError(try WGConfig(parsing: "[Interface]\nPrivateKey = \(privA)\nAddress = 10.0.0.2/32\n"))
     }
 
+    func testWgQuickTextRoundTrips() throws {
+        let c = try WGConfig(parsing: sample)
+        XCTAssertEqual(try WGConfig(parsing: c.wgQuickText()), c)
+    }
+
     func testSetconfTextStripsWgQuickKeys() throws {
         let out = try WGConfig(parsing: sample).wgSetconfText()
         XCTAssertFalse(out.contains("Address"))
