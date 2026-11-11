@@ -17,7 +17,7 @@ jobs:
     name: Swift package (build + test)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         run: swift build
       - name: Test
@@ -27,7 +27,7 @@ jobs:
     name: macOS app
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
@@ -41,7 +41,7 @@ jobs:
     name: Scripts and plists
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install ShellCheck
         run: brew install shellcheck
       - name: ShellCheck
