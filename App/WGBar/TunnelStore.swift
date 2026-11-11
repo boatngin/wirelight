@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import Network
 import SwiftUI
 import UserNotifications
 import WGCore
@@ -52,6 +54,9 @@ final class TunnelStore: ObservableObject {
     }
 
     private var pollTask: Task<Void, Never>?
+    private let pathMonitor = NWPathMonitor()
+    private var lastPathSignature: String?
+    private var wakeObserver: NSObjectProtocol?
     private var notifiedStale = false
 
     init() {
@@ -59,6 +64,39 @@ final class TunnelStore: ObservableObject {
         selectedName = UserDefaults.standard.string(forKey: Keys.selected) ?? profiles.first?.name
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         startPolling()
+        watchSystemEvents()
+    }
+
+    // MARK: Wake / network change
+
+    private func watchSystemEvents() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                // Give Wi-Fi a moment to reassociate before re-resolving endpoints.
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await self?.helperRefresh(reason: "wake")
+            }
+        }
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let sig = "\(path.status)|" + path.availableInterfaces.map(\.name).joined(separator: ",")
+            Task { @MainActor in
+                guard let self else { return }
+                defer { self.lastPathSignature = sig }
+                guard let last = self.lastPathSignature, last != sig, path.status == .satisfied else { return }
+                await self.helperRefresh(reason: "network change")
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "com.thanaboat.wgbar.path"))
+    }
+
+    /// Asks the helper to re-resolve endpoints / re-pin routes. No-op when disconnected.
+    func helperRefresh(reason: String) async {
+        guard isConnected, !busy else { return }
+        if let r = try? await HelperClient.send(.refresh, timeout: 15), r.ok {
+            active = r.status?.first
+        }
     }
 
     var isConnected: Bool { active != nil }

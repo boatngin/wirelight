@@ -12,7 +12,15 @@ signal(SIGPIPE, SIG_IGN)
 umask(0o077)
 
 let controller = TunnelController()
-controller.recoverOnStart()
+/// All controller access is serialized on this queue (socket requests + network watcher).
+let controllerQueue = DispatchQueue(label: "com.thanaboat.wgbar.controller")
+controllerQueue.sync { controller.recoverOnStart() }
+
+// Watch for default-route changes (Wi-Fi <-> hotspot, wake from sleep).
+let networkTimer = DispatchSource.makeTimerSource(queue: controllerQueue)
+networkTimer.schedule(deadline: .now() + 15, repeating: 15)
+networkTimer.setEventHandler { controller.checkNetworkChange() }
+networkTimer.resume()
 
 /// Only root or members of the `admin` group may talk to the helper.
 func isAuthorized(_ fd: Int32) -> (Bool, uid_t) {
@@ -40,6 +48,11 @@ func handle(_ request: Request) -> Response {
             log("request: up \(name)")
             try controller.up(name: name, configText: config)
             return Response(ok: true, status: controller.status())
+        case .refresh:
+            controller.refresh()
+            return Response(ok: true, status: controller.status())
+        case .doctor:
+            return Response(ok: true, messages: controller.doctor())
         case let .down(name):
             log("request: down \(name)")
             try controller.down(name: name)
@@ -60,7 +73,8 @@ func serve(_ fd: Int32) {
     } else {
         do {
             let body = try UnixSocket.readFrame(fd, maxSize: maxRequestSize)
-            response = handle(try IPCFraming.decodeBody(Request.self, from: body))
+            let request = try IPCFraming.decodeBody(Request.self, from: body)
+            response = controllerQueue.sync { handle(request) }
         } catch {
             log("bad request from uid \(uid): \(error)", error: true)
             response = .failure("bad request: \(error)")
