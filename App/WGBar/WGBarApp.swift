@@ -13,6 +13,12 @@ struct WGBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("WGBar", id: "main") {
+            MainWindow()
+                .environmentObject(store)
+        }
+        .defaultSize(width: 1100, height: 700)
+
         Window("Import Config", id: "import") {
             ImportView()
                 .environmentObject(store)
