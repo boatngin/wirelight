@@ -1,6 +1,4 @@
 import AppKit
-import CoreLocation
-import CoreWLAN
 import Foundation
 import Network
 import SwiftUI
@@ -17,9 +15,6 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var createdAt: Date?
     var splitDNSDomains: [String] = []
     var excludedCIDRs: [String] = []
-    /// Connect on untrusted Wi-Fi, disconnect on trusted networks (see `trustedSSIDs`).
-    var onDemand: Bool = false
-    var trustedSSIDs: [String] = []
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -39,8 +34,6 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         splitDNSDomains = try c.decodeIfPresent([String].self, forKey: .splitDNSDomains) ?? []
         excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
-        onDemand = try c.decodeIfPresent(Bool.self, forKey: .onDemand) ?? false
-        trustedSSIDs = try c.decodeIfPresent([String].self, forKey: .trustedSSIDs) ?? []
     }
 
     var upOptions: UpOptions { UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs) }
@@ -123,9 +116,7 @@ final class TunnelStore: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private let pathMonitor = NWPathMonitor()
-    private let locationManager = CLLocationManager()
     private var lastPathSignature: String?
-    private var lastSSID: String?
     private var wakeObserver: NSObjectProtocol?
     private var notifiedStale = false
 
@@ -140,15 +131,12 @@ final class TunnelStore: ObservableObject {
         }
         loadProfiles()
         selectedName = UserDefaults.standard.string(forKey: Keys.selected) ?? profiles.first?.name
+        hotKey.onTrigger = { [weak self] in Task { @MainActor in await self?.toggle() } }
+        hotKey.update(toggleHotKey)
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         startPolling()
         watchSystemEvents()
-        // Reading the Wi-Fi SSID via CoreWLAN needs Location permission on recent macOS.
-        locationManager.requestWhenInUseAuthorization()
-        Task {
-            await autoConnectIfNeeded()
-            await evaluateOnDemand()
-        }
+        Task { await autoConnectIfNeeded() }
     }
 
     // MARK: Wake / network change
@@ -168,10 +156,8 @@ final class TunnelStore: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 defer { self.lastPathSignature = sig }
-                if let last = self.lastPathSignature, last != sig, path.status == .satisfied {
-                    await self.helperRefresh(reason: "network change")
-                }
-                await self.evaluateOnDemand()
+                guard let last = self.lastPathSignature, last != sig, path.status == .satisfied else { return }
+                await self.helperRefresh(reason: "network change")
             }
         }
         pathMonitor.start(queue: DispatchQueue(label: "com.thanaboat.wgbar.path"))
@@ -241,7 +227,6 @@ final class TunnelStore: ObservableObject {
             helperReachable = false
             active = nil
         }
-        await evaluateOnDemand()
     }
 
     private func checkHandshake() {
@@ -312,6 +297,15 @@ final class TunnelStore: ObservableObject {
         }
     }
 
+    /// Connects the current tunnel, or disconnects when one is active (used by the global hotkey).
+    func toggle() async {
+        if isConnected {
+            await disconnect()
+        } else if let name = currentProfile?.name {
+            await connect(name)
+        }
+    }
+
     /// Switches between the config's AllowedIPs and 0.0.0.0/0, ::/0. Reconnects if active.
     func setRouteAll(_ on: Bool, for name: String) async {
         guard let i = profiles.firstIndex(where: { $0.name == name }), profiles[i].routeAll != on else { return }
@@ -338,38 +332,6 @@ final class TunnelStore: ObservableObject {
     }
 
     func configText(_ name: String) -> String? { KeychainStore.load(name) }
-
-    /// Copies a tunnel's config and per-tunnel options under a free name like `home-2`.
-    func duplicate(_ name: String) {
-        guard let text = configText(name), let source = profile(name) else {
-            lastError = StoreError.missingConfig(name).description
-            return
-        }
-        var n = 2
-        while n < 1000 {
-            let suffix = "-\(n)"
-            let candidate = String(name.prefix(15 - suffix.count)) + suffix
-            guard Validation.isValidTunnelName(candidate), profile(candidate) == nil else { n += 1; continue }
-            do {
-                try importConfig(name: candidate, text: text)
-            } catch {
-                lastError = String(describing: error)
-                addLog(String(describing: error), isError: true)
-                return
-            }
-            if let i = profiles.firstIndex(where: { $0.name == candidate }) {
-                profiles[i].splitDNSDomains = source.splitDNSDomains
-                profiles[i].excludedCIDRs = source.excludedCIDRs
-                profiles[i].routeAll = source.routeAll
-                saveProfiles()
-            }
-            mainSelection = candidate
-            addLog("Duplicated \(name) as \(candidate)")
-            return
-        }
-        lastError = StoreError.invalidName.description
-        addLog(StoreError.invalidName.description, isError: true)
-    }
 
     func updateConfig(name: String, text: String) throws {
         let cfg = try WGConfig(parsing: text)
@@ -437,50 +399,29 @@ final class TunnelStore: ObservableObject {
         await connect(name)
     }
 
-    // MARK: On-demand (Wi-Fi rules)
+    // MARK: Global hotkey
 
-    /// Current Wi-Fi SSID via CoreWLAN, or nil on Ethernet / no Wi-Fi.
-    /// Requires Location permission on recent macOS (requested in `init`).
-    func currentSSID() -> String? {
-        guard let iface = CWWiFiClient.shared().interface(),
-              let ssid = iface.ssid(), !ssid.isEmpty else { return nil }
-        return ssid
-    }
+    static let toggleHotKeyKey = "toggleHotKey"
+    private let hotKey = GlobalHotKey()
 
-    /// Applies per-tunnel on-demand rules to the current Wi-Fi network. No-op when not
-    /// on Wi-Fi. Only acts when the SSID changed (unless `force`), so a failed connect
-    /// is not retried on every poll.
-    private func evaluateOnDemand(force: Bool = false) async {
-        if Self.isDemo { return }
-        let ssid = currentSSID()
-        if !force, ssid == lastSSID { return }
-        lastSSID = ssid
-        guard let ssid else { return }
-        for p in profiles where p.onDemand {
-            if p.trustedSSIDs.contains(ssid) {
-                if active?.name == p.name {
-                    addLog("On-demand: '\(ssid)' is trusted, disconnecting \(p.name)")
-                    await disconnect()
-                }
-            } else if !isConnected {
-                addLog("On-demand: '\(ssid)' is not trusted, connecting \(p.name)")
-                await connect(p.name)
+    /// Global shortcut that toggles the current tunnel; nil disables it. Defaults to ⌃⌥⌘W on first run.
+    var toggleHotKey: HotKeyCombo? {
+        get {
+            guard let dict = UserDefaults.standard.dictionary(forKey: Self.toggleHotKeyKey) as? [String: Int] else {
+                return UserDefaults.standard.object(forKey: Self.toggleHotKeyKey) == nil ? .default : nil
             }
+            guard let code = dict["keyCode"], let mods = dict["modifiers"] else { return nil }
+            return HotKeyCombo(keyCode: UInt32(truncatingIfNeeded: code), modifiers: UInt32(truncatingIfNeeded: mods))
         }
-    }
-
-    func setOnDemand(_ on: Bool, for name: String) async {
-        guard let i = profiles.firstIndex(where: { $0.name == name }), profiles[i].onDemand != on else { return }
-        profiles[i].onDemand = on
-        saveProfiles()
-        if on { await evaluateOnDemand(force: true) }
-    }
-
-    func setTrustedSSIDs(_ ssids: [String], for name: String) async {
-        guard let i = profiles.firstIndex(where: { $0.name == name }) else { return }
-        profiles[i].trustedSSIDs = ssids
-        saveProfiles()
-        if profiles[i].onDemand { await evaluateOnDemand(force: true) }
+        set {
+            if let c = newValue {
+                UserDefaults.standard.set(["keyCode": Int(c.keyCode), "modifiers": Int(c.modifiers)], forKey: Self.toggleHotKeyKey)
+            } else {
+                UserDefaults.standard.set([String: Int](), forKey: Self.toggleHotKeyKey)
+            }
+            hotKey.update(newValue)
+            objectWillChange.send()
+        }
     }
 
     // MARK: Test connection
