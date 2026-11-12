@@ -21,17 +21,18 @@ struct HotKeyCombo: Codable, Equatable {
 
     /// Printable name of a virtual key code for the current keyboard layout.
     static func keyName(_ keyCode: UInt32) -> String {
-        guard let source = TISCopyCurrentKeyboardInputSource()?.takeUnretainedValue(),
-              let data = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)?.takeUnretainedValue() as CFData?,
-              let ptr = CFDataGetBytePtr(data) else { return "?" }
-        let layout = ptr.assumingMemoryBound(to: UCKeyboardLayout.self)
+        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return "?" }
+        let data = Unmanaged<CFData>.fromOpaque(raw).takeUnretainedValue()
+        guard let ptr = CFDataGetBytePtr(data) else { return "?" }
+        let layout = UnsafeRawPointer(ptr).assumingMemoryBound(to: UCKeyboardLayout.self)
         var dead: UInt32 = 0
-        var len: UniCharCount = 0
+        var len = 0
         var chars = [UniChar](repeating: 0, count: 8)
         let status = UCKeyTranslate(layout, UInt16(keyCode), UInt16(kUCKeyActionDisplay), 0,
-                                    UInt32(LMGetKbdType()), 0, &dead, UniCharCount(chars.count), &len, &chars)
+                                    UInt32(LMGetKbdType()), 0, &dead, chars.count, &len, &chars)
         guard status == noErr, len > 0 else { return "?" }
-        return String(utf16CodeUnits: chars[0..<Int(len)], count: Int(len)).uppercased()
+        return String(utf16CodeUnits: Array(chars[0..<len]), count: len).uppercased()
     }
 }
 
@@ -73,9 +74,9 @@ final class GlobalHotKey {
         guard let event, let userData else { return noErr }
         var id = EventHotKeyID()
         guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
-                                nil, ByteCount(MemoryLayout<EventHotKeyID>.size), nil, &id) == noErr else { return noErr }
-        guard id.signature == Self.signature, id.id == Self.hotKeyID else { return noErr }
-        Unmanaged<GlobalHotKey>.fromRaw(userData).takeUnretainedValue().onTrigger?()
+                                nil, MemoryLayout<EventHotKeyID>.size, nil, &id) == noErr else { return noErr }
+        guard id.signature == GlobalHotKey.signature, id.id == GlobalHotKey.hotKeyID else { return noErr }
+        Unmanaged<GlobalHotKey>.fromOpaque(userData).takeUnretainedValue().onTrigger?()
         return noErr
     }
 
