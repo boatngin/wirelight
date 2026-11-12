@@ -258,6 +258,7 @@ struct TunnelDetailView: View {
                            title: profile.favorite ? "Unfavorite" : "Favorite") { store.toggleFavorite(profile.name) }
                 PillButton(icon: "pencil", title: "Edit") { store.mainSection = .settings }
                 PillButton(icon: "square.and.arrow.up", title: "Export") { exportConfig() }
+                PillButton(icon: "plus.square.on.square", title: "Duplicate") { store.duplicate(profile.name) }
                 Spacer()
             }
             if let testResult {
