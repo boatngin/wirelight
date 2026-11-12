@@ -218,6 +218,7 @@ struct TunnelCard: View {
         .onHover { hovering = $0 }
         .contextMenu {
             Button(profile.favorite ? "Unfavorite" : "Favorite") { store.toggleFavorite(profile.name) }
+            Button("Duplicate") { store.duplicate(profile.name) }
             Button(isActive ? "Disconnect" : "Connect") {
                 Task { isActive ? await store.disconnect() : await store.connect(profile.name) }
             }
