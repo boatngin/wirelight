@@ -24,5 +24,7 @@
 	<string>public.app-category.utilities</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSLocationUsageDescription</key>
+	<string>Wirelight reads the name of the current Wi-Fi network to connect or disconnect tunnels automatically (on demand). The name is only used on this Mac and never leaves it.</string>
 </dict>
 </plist>

@@ -5,8 +5,16 @@ struct EditableList: View {
     let items: [String]
     let placeholder: String
     let icon: String
+    /// SSIDs are case-sensitive; domains and CIDRs are not.
+    let lowercase: Bool
     let validate: (String) -> Bool
     let onChange: ([String]) -> Void
+
+    init(items: [String], placeholder: String, icon: String, lowercase: Bool = true,
+         validate: @escaping (String) -> Bool, onChange: @escaping ([String]) -> Void) {
+        self.items = items; self.placeholder = placeholder; self.icon = icon
+        self.lowercase = lowercase; self.validate = validate; self.onChange = onChange
+    }
 
     @State private var draft = ""
     @State private var invalid = false
@@ -44,7 +52,8 @@ struct EditableList: View {
     }
 
     private func add() {
-        let value = draft.trimmingCharacters(in: .whitespaces).lowercased()
+        var value = draft.trimmingCharacters(in: .whitespaces)
+        if lowercase { value = value.lowercased() }
         guard !value.isEmpty else { return }
         guard validate(value) else { invalid = true; return }
         if !items.contains(value) { onChange(items + [value]) }
