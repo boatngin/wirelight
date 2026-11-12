@@ -21,4 +21,41 @@ final class WGDumpTests: XCTestCase {
         XCTAssertEqual(peers[1].allowedIPs, [])
         XCTAssertFalse(peers.contains { $0.publicKey == privA })
     }
+
+    func testParsePeersPreservesIPv6Endpoint() throws {
+        let dump = "\(pubB)\t(none)\t[2001:db8::1]:51820\t2001:db8::/64\t1700000000\t1234\t5678\t25"
+        let peers = WGDump.parsePeers(dump)
+        XCTAssertEqual(peers.count, 1)
+        let peer = try XCTUnwrap(peers.first)
+        XCTAssertEqual(peer.endpoint, "[2001:db8::1]:51820")
+        XCTAssertEqual(peer.allowedIPs, ["2001:db8::/64"])
+    }
+
+    func testParsePeersWithKeepaliveOffAndNoAllowedIPs() throws {
+        let dump = "\(pubB)\t(none)\t(none)\t(none)\t0\t0\t0\toff"
+        let peers = WGDump.parsePeers(dump)
+        XCTAssertEqual(peers.count, 1)
+        let peer = try XCTUnwrap(peers.first)
+        XCTAssertEqual(peer.publicKey, pubB)
+        XCTAssertNil(peer.endpoint)
+        XCTAssertNil(peer.latestHandshake)
+        XCTAssertEqual(peer.allowedIPs, [])
+        XCTAssertEqual(peer.rxBytes, 0)
+        XCTAssertEqual(peer.txBytes, 0)
+    }
+
+    func testParsePeersSkipsMissingAndExtraColumns() {
+        let fields = [pubB, "(none)", "203.0.113.5:51820", "10.0.0.0/24", "0", "1234", "5678", "off"]
+        let valid = fields.joined(separator: "\t")
+        let malformed = (1..<fields.count).map { fields.prefix($0).joined(separator: "\t") }
+            + [valid + "\textra", valid + "\t"]
+
+        for line in malformed {
+            let peers = WGDump.parsePeers([line, valid, line].joined(separator: "\n"))
+            XCTAssertEqual(peers.count, 1, "Malformed row must be skipped: \(line)")
+            XCTAssertEqual(peers.first?.publicKey, pubB)
+            XCTAssertEqual(peers.first?.rxBytes, 1234)
+            XCTAssertEqual(peers.first?.txBytes, 5678)
+        }
+    }
 }
