@@ -45,13 +45,22 @@
 
 ### 1. Install the WireGuard tools
 
-Wirelight uses the official userspace tools. Install them with [Homebrew](https://brew.sh):
+Wirelight uses the official userspace tools. The Homebrew cask in step 2 installs them for you; to install them manually, use [Homebrew](https://brew.sh):
 
 ```bash
 brew install wireguard-tools wireguard-go
 ```
 
 ### 2. Install Wirelight
+
+With [Homebrew](https://brew.sh):
+
+```bash
+brew tap boatngin/tap
+brew install --cask wirelight
+```
+
+Or manually:
 
 1. Download **[Wirelight.pkg](https://github.com/boatngin/wirelight/releases/latest/download/Wirelight.pkg)** from the [latest release](https://github.com/boatngin/wirelight/releases/latest).
 2. Open it and follow the installer. It installs:
@@ -155,7 +164,7 @@ Planned work lives in [issues](https://github.com/boatngin/wirelight/issues). Hi
 
 - [ ] [Kill switch](https://github.com/boatngin/wirelight/issues/4)
 - [ ] [On-demand rules by Wi-Fi network](https://github.com/boatngin/wirelight/issues/5)
-- [ ] [Homebrew cask](https://github.com/boatngin/wirelight/issues/10)
+- [x] [Homebrew cask](https://github.com/boatngin/wirelight/issues/10)
 - [ ] [Notarized releases](https://github.com/boatngin/wirelight/issues/11)
 - [ ] [Global hotkey](https://github.com/boatngin/wirelight/issues/8)
 
