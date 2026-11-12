@@ -71,6 +71,7 @@ enum StoreError: Error, CustomStringConvertible {
     case missingConfig(String)
     case invalidName
     case duplicateName(String)
+    case activeTunnel(String)
 
     var description: String {
         switch self {
@@ -78,6 +79,7 @@ enum StoreError: Error, CustomStringConvertible {
         case let .missingConfig(n): return "No saved config for '\(n)' in Keychain"
         case .invalidName: return "Name must be 1–15 characters: letters, digits, _ or -"
         case let .duplicateName(n): return "A tunnel named '\(n)' already exists"
+        case let .activeTunnel(n): return "Disconnect '\(n)' before renaming it"
         }
     }
 }
@@ -396,6 +398,26 @@ final class TunnelStore: ObservableObject {
         profiles.removeAll { $0.name == name }
         saveProfiles()
         if selectedName == name { selectedName = profiles.first?.name }
+    }
+
+    func rename(_ oldName: String, to newName: String) throws {
+        guard oldName != newName else { return }
+        guard Validation.isValidTunnelName(newName) else { throw StoreError.invalidName }
+        guard profile(newName) == nil else { throw StoreError.duplicateName(newName) }
+        guard active?.name != oldName else { throw StoreError.activeTunnel(oldName) }
+        if !Self.isDemo {
+            guard let text = KeychainStore.load(oldName) else { throw StoreError.missingConfig(oldName) }
+            try KeychainStore.save(text, account: newName)
+            KeychainStore.delete(oldName)
+            if let cfg = configs.removeValue(forKey: oldName) { configs[newName] = cfg }
+        }
+        if let i = profiles.firstIndex(where: { $0.name == oldName }) {
+            profiles[i].name = newName
+            saveProfiles()
+        }
+        if selectedName == oldName { selectedName = newName }
+        if mainSelection == oldName { mainSelection = newName }
+        addLog("Renamed \(oldName) to \(newName)")
     }
 
     private func loadProfiles() {
