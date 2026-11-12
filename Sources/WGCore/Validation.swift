@@ -63,6 +63,12 @@ public enum Validation {
         return (isValidIPv4(host) || isValidHostname(host)) && isValidPort(port)
     }
 
+    /// A Wi-Fi SSID: 1–32 bytes, no control characters. Case-sensitive.
+    public static func isValidSSID(_ s: String) -> Bool {
+        guard (1...32).contains(s.utf8.count) else { return false }
+        return s.unicodeScalars.allSatisfy { !$0.properties.isControl }
+    }
+
     public static func isValidTunnelName(_ s: String) -> Bool {
         let range = NSRange(s.startIndex..., in: s)
         return tunnelNameRegex.firstMatch(in: s, range: range) != nil
