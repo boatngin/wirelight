@@ -20,6 +20,8 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     /// Connect on untrusted Wi-Fi, disconnect on trusted networks (see `trustedSSIDs`).
     var onDemand: Bool = false
     var trustedSSIDs: [String] = []
+    /// Block all non-tunnel traffic if the tunnel drops unexpectedly.
+    var killSwitch: Bool = false
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -41,9 +43,12 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
         onDemand = try c.decodeIfPresent(Bool.self, forKey: .onDemand) ?? false
         trustedSSIDs = try c.decodeIfPresent([String].self, forKey: .trustedSSIDs) ?? []
+        killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
     }
 
-    var upOptions: UpOptions { UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs) }
+    var upOptions: UpOptions {
+        UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs, killSwitch: killSwitch)
+    }
 }
 
 /// One traffic sample (bytes/second) derived from successive status polls.
@@ -66,6 +71,7 @@ enum StoreError: Error, CustomStringConvertible {
     case missingConfig(String)
     case invalidName
     case duplicateName(String)
+    case activeTunnel(String)
 
     var description: String {
         switch self {
@@ -73,6 +79,7 @@ enum StoreError: Error, CustomStringConvertible {
         case let .missingConfig(n): return "No saved config for '\(n)' in Keychain"
         case .invalidName: return "Name must be 1–15 characters: letters, digits, _ or -"
         case let .duplicateName(n): return "A tunnel named '\(n)' already exists"
+        case let .activeTunnel(n): return "Disconnect '\(n)' before renaming it"
         }
     }
 }
@@ -284,7 +291,7 @@ final class TunnelStore: ObservableObject {
                 text = cfg.wgQuickText()
             }
             let options = profile(name)?.upOptions ?? UpOptions()
-            let request: Request = (options.splitDNSDomains.isEmpty && options.excludedCIDRs.isEmpty)
+            let request: Request = (options.splitDNSDomains.isEmpty && options.excludedCIDRs.isEmpty && !options.killSwitch)
                 ? .up(name: name, config: text)
                 : .upWithOptions(name: name, config: text, options: options)
             let r = try check(await HelperClient.send(request, timeout: 30))
@@ -406,6 +413,26 @@ final class TunnelStore: ObservableObject {
         if selectedName == name { selectedName = profiles.first?.name }
     }
 
+    func rename(_ oldName: String, to newName: String) throws {
+        guard oldName != newName else { return }
+        guard Validation.isValidTunnelName(newName) else { throw StoreError.invalidName }
+        guard profile(newName) == nil else { throw StoreError.duplicateName(newName) }
+        guard active?.name != oldName else { throw StoreError.activeTunnel(oldName) }
+        if !Self.isDemo {
+            guard let text = KeychainStore.load(oldName) else { throw StoreError.missingConfig(oldName) }
+            try KeychainStore.save(text, account: newName)
+            KeychainStore.delete(oldName)
+            if let cfg = configs.removeValue(forKey: oldName) { configs[newName] = cfg }
+        }
+        if let i = profiles.firstIndex(where: { $0.name == oldName }) {
+            profiles[i].name = newName
+            saveProfiles()
+        }
+        if selectedName == oldName { selectedName = newName }
+        if mainSelection == oldName { mainSelection = newName }
+        addLog("Renamed \(oldName) to \(newName)")
+    }
+
     private func loadProfiles() {
         guard let data = UserDefaults.standard.data(forKey: Keys.profiles),
               let list = try? JSONDecoder().decode([TunnelProfile].self, from: data) else { return }
@@ -423,6 +450,21 @@ final class TunnelStore: ObservableObject {
 
     func setExclusions(_ cidrs: [String], for name: String) async {
         await updateProfile(name) { $0.excludedCIDRs = cidrs }
+    }
+
+    /// Persisted for the next connect; applied live via IPC when the tunnel is active.
+    func setKillSwitch(_ on: Bool, for name: String) async {
+        guard let i = profiles.firstIndex(where: { $0.name == name }), profiles[i].killSwitch != on else { return }
+        profiles[i].killSwitch = on
+        saveProfiles()
+        guard active?.name == name else { return }
+        do {
+            _ = try check(await HelperClient.send(.setKillSwitch(name: name, enabled: on), timeout: 15))
+            addLog("Kill switch \(on ? "on" : "off") for \(name)")
+        } catch {
+            lastError = String(describing: error)
+            addLog(String(describing: error), isError: true)
+        }
     }
 
     private func updateProfile(_ name: String, _ change: (inout TunnelProfile) -> Void) async {

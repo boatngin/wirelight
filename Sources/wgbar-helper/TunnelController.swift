@@ -17,6 +17,10 @@ struct TunnelState: Codable {
     var excludedCIDRs: [String]?
     /// /etc/resolver files we created for split DNS.
     var resolverFiles: [String]?
+    /// Kill switch on: block all non-tunnel traffic via a pf anchor.
+    var killSwitch: Bool?
+    /// Resolved endpoint IPs (allowed through the kill switch anchor).
+    var endpointIPs: [String]?
 }
 
 enum TunnelError: Error, CustomStringConvertible {
@@ -94,6 +98,7 @@ final class TunnelController {
 
         var state = TunnelState(name: name, utun: utun)
         state.excludedCIDRs = options.excludedCIDRs
+        state.killSwitch = options.killSwitch
         state.peerEndpoints = Dictionary(uniqueKeysWithValues: config.peers.compactMap { p in
             p.endpoint.map { (p.publicKey, $0) }
         })
@@ -112,6 +117,10 @@ final class TunnelController {
                 try applyDNS(config, state: &state)
             } else {
                 try applySplitDNS(config, domains: options.splitDNSDomains, state: &state)
+            }
+            if options.killSwitch {
+                do { try PFGuard.install(utun: utun, endpointIPs: state.endpointIPs ?? []) }
+                catch { log("\(name): kill switch anchor failed: \(error)", error: true) }
             }
             log("\(name): up on \(utun) (\(state.routes.count) routes, dns \(state.dnsBackup == nil ? "unchanged" : "set"))")
         } catch {
@@ -171,9 +180,11 @@ final class TunnelController {
             try addRoute(RouteEntry(family: fam, destination: cidr, gateway: def.gateway,
                                     interface: def.gateway == nil ? def.interface : nil), state: &state)
         }
+        let ips = NetworkConfigurator.resolvedEndpointIPs(utun: state.utun)
+        state.endpointIPs = ips
         let full4 = state.full4 ?? false, full6 = state.full6 ?? false
         guard full4 || full6 else { return }
-        for ip in NetworkConfigurator.resolvedEndpointIPs(utun: state.utun) {
+        for ip in ips {
             let fam = NetworkConfigurator.family(of: ip)
             guard (fam == "inet" && full4) || (fam == "inet6" && full6),
                   let def = NetworkConfigurator.defaultRoute(family: fam),
@@ -255,8 +266,39 @@ final class TunnelController {
         log("\(name): down")
     }
 
-    /// Best-effort reverse of `up`: DNS → routes → interface → state files.
+    // MARK: kill switch
+
+    /// Toggles the kill switch on a tunnel that is currently up (no reconnect needed).
+    func setKillSwitch(_ name: String, enabled: Bool) throws {
+        guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
+        guard var state = tunnels[name] else { throw TunnelError.notUp(name) }
+        state.killSwitch = enabled
+        if enabled {
+            do { try PFGuard.install(utun: state.utun, endpointIPs: state.endpointIPs ?? []) }
+            catch {
+                state.killSwitch = false
+                save(state)
+                throw error
+            }
+        } else {
+            PFGuard.remove()
+        }
+        save(state)
+        log("\(name): kill switch \(enabled ? "on" : "off")")
+    }
+
+    /// If a kill-switch tunnel's control socket vanished (wireguard-go died), the
+    /// tunnel dropped unexpectedly: load the block anchor so traffic cannot leak.
+    private func checkKillSwitches() {
+        for s in tunnels.values where s.killSwitch == true && !fm.fileExists(atPath: uapiSocket(s.utun)) {
+            log("\(s.name): control socket missing with kill switch on, blocking non-tunnel traffic", error: true)
+            try? PFGuard.install(utun: s.utun, endpointIPs: s.endpointIPs ?? [])
+        }
+    }
+
+    /// Best-effort reverse of `up`: kill switch → DNS → routes → interface → state files.
     private func teardown(_ state: TunnelState) {
+        if state.killSwitch == true { PFGuard.remove() }
         if let backup = state.dnsBackup {
             for (svc, setting) in backup.sorted(by: { $0.key < $1.key }) {
                 do { try NetworkConfigurator.apply(setting, to: svc) }
@@ -292,6 +334,9 @@ final class TunnelController {
                 save(state)
                 do { try pinEndpoints(state: &state) }
                 catch { log("\(state.name): cannot re-pin endpoint routes: \(error)", error: true) }
+                if state.killSwitch == true {
+                    try? PFGuard.install(utun: state.utun, endpointIPs: state.endpointIPs ?? [])
+                }
             }
 
             if let wanted = state.dnsWanted, var backup = state.dnsBackup,
@@ -315,6 +360,7 @@ final class TunnelController {
 
     /// Called periodically; triggers `refresh()` when the default route changes.
     func checkNetworkChange() {
+        checkKillSwitches()
         guard !tunnels.isEmpty else { lastNetworkSignature = nil; return }
         let sig = ["inet", "inet6"].map { fam -> String in
             guard let d = NetworkConfigurator.defaultRoute(family: fam) else { return "\(fam):-" }
@@ -368,8 +414,10 @@ final class TunnelController {
         }
     }
 
-    /// On start: re-adopt tunnels that are still alive, clean up the rest.
+    /// On start: remove any leftover kill switch anchor, then re-adopt tunnels
+    /// that are still alive and clean up the rest.
     func recoverOnStart() {
+        PFGuard.remove()
         guard let files = try? fm.contentsOfDirectory(atPath: Self.stateDir) else { return }
         for file in files where file.hasSuffix(".state.json") {
             let path = "\(Self.stateDir)/\(file)"
@@ -383,6 +431,7 @@ final class TunnelController {
             }
             if fm.fileExists(atPath: uapiSocket(s.utun)) {
                 tunnels[s.name] = s
+                if s.killSwitch == true { try? PFGuard.install(utun: s.utun, endpointIPs: s.endpointIPs ?? []) }
                 log("\(s.name): re-adopted running tunnel on \(s.utun)")
             } else {
                 log("\(s.name): cleaning up stale state from previous run")
