@@ -172,13 +172,28 @@ struct TunnelDetailView: View {
 
             Divider().padding(.horizontal, 14)
 
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("On demand").font(.system(size: 13))
+                    Text("Connect on untrusted Wi-Fi, disconnect on trusted networks. Reads the Wi-Fi name, which needs Location permission.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(get: { profile.onDemand },
+                                         set: { on in Task { await store.setOnDemand(on, for: profile.name) } }))
+                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+
+            Divider().padding(.horizontal, 14)
+
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { showAdvanced.toggle() }
             } label: {
                 HStack {
                     Text("Advanced").font(.system(size: 13))
-                    if !profile.splitDNSDomains.isEmpty || !profile.excludedCIDRs.isEmpty {
-                        Text("\(profile.splitDNSDomains.count + profile.excludedCIDRs.count) rules")
+                    if !profile.splitDNSDomains.isEmpty || !profile.excludedCIDRs.isEmpty || !profile.trustedSSIDs.isEmpty {
+                        Text("\(profile.splitDNSDomains.count + profile.excludedCIDRs.count + profile.trustedSSIDs.count) rules")
                             .font(.system(size: 10, weight: .medium))
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(Capsule().fill(Color.accentColor.opacity(0.15)))
@@ -209,6 +224,15 @@ struct TunnelDetailView: View {
                         EditableList(items: profile.excludedCIDRs, placeholder: "CIDR, e.g. 10.0.5.0/24",
                                      icon: "arrow.triangle.branch", validate: Validation.isValidCIDR) { list in
                             Task { await store.setExclusions(list, for: profile.name) }
+                        }
+                    }
+                    if profile.onDemand {
+                        advancedBlock(title: "Trusted Wi-Fi networks",
+                                      hint: "On these networks the tunnel disconnects; on any other Wi-Fi it connects. Names are case-sensitive. On Ethernet the tunnel is left as is. Reading the Wi-Fi name needs Location permission — it is only used on this Mac.") {
+                            EditableList(items: profile.trustedSSIDs, placeholder: "SSID, e.g. HomeWiFi",
+                                         icon: "wifi", lowercase: false, validate: Validation.isValidSSID) { list in
+                                Task { await store.setTrustedSSIDs(list, for: profile.name) }
+                            }
                         }
                     }
                     Text("Changes reconnect the tunnel if it's active.")

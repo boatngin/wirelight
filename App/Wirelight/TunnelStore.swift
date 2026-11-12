@@ -1,4 +1,6 @@
 import AppKit
+import CoreLocation
+import CoreWLAN
 import Foundation
 import Network
 import SwiftUI
@@ -15,6 +17,9 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var createdAt: Date?
     var splitDNSDomains: [String] = []
     var excludedCIDRs: [String] = []
+    /// Connect on untrusted Wi-Fi, disconnect on trusted networks (see `trustedSSIDs`).
+    var onDemand: Bool = false
+    var trustedSSIDs: [String] = []
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -34,6 +39,8 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         splitDNSDomains = try c.decodeIfPresent([String].self, forKey: .splitDNSDomains) ?? []
         excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
+        onDemand = try c.decodeIfPresent(Bool.self, forKey: .onDemand) ?? false
+        trustedSSIDs = try c.decodeIfPresent([String].self, forKey: .trustedSSIDs) ?? []
     }
 
     var upOptions: UpOptions { UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs) }
@@ -116,7 +123,9 @@ final class TunnelStore: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private let pathMonitor = NWPathMonitor()
+    private let locationManager = CLLocationManager()
     private var lastPathSignature: String?
+    private var lastSSID: String?
     private var wakeObserver: NSObjectProtocol?
     private var notifiedStale = false
 
@@ -134,7 +143,12 @@ final class TunnelStore: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         startPolling()
         watchSystemEvents()
-        Task { await autoConnectIfNeeded() }
+        // Reading the Wi-Fi SSID via CoreWLAN needs Location permission on recent macOS.
+        locationManager.requestWhenInUseAuthorization()
+        Task {
+            await autoConnectIfNeeded()
+            await evaluateOnDemand()
+        }
     }
 
     // MARK: Wake / network change
@@ -154,8 +168,10 @@ final class TunnelStore: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 defer { self.lastPathSignature = sig }
-                guard let last = self.lastPathSignature, last != sig, path.status == .satisfied else { return }
-                await self.helperRefresh(reason: "network change")
+                if let last = self.lastPathSignature, last != sig, path.status == .satisfied {
+                    await self.helperRefresh(reason: "network change")
+                }
+                await self.evaluateOnDemand()
             }
         }
         pathMonitor.start(queue: DispatchQueue(label: "com.thanaboat.wgbar.path"))
@@ -225,6 +241,7 @@ final class TunnelStore: ObservableObject {
             helperReachable = false
             active = nil
         }
+        await evaluateOnDemand()
     }
 
     private func checkHandshake() {
@@ -418,6 +435,52 @@ final class TunnelStore: ObservableObject {
         guard connectOnLaunch, helperReachable, !isConnected, let name = currentProfile?.name else { return }
         addLog("Connecting \(name) at launch")
         await connect(name)
+    }
+
+    // MARK: On-demand (Wi-Fi rules)
+
+    /// Current Wi-Fi SSID via CoreWLAN, or nil on Ethernet / no Wi-Fi.
+    /// Requires Location permission on recent macOS (requested in `init`).
+    func currentSSID() -> String? {
+        guard let iface = CWWiFiClient.shared().interface(),
+              let ssid = iface.ssid(), !ssid.isEmpty else { return nil }
+        return ssid
+    }
+
+    /// Applies per-tunnel on-demand rules to the current Wi-Fi network. No-op when not
+    /// on Wi-Fi. Only acts when the SSID changed (unless `force`), so a failed connect
+    /// is not retried on every poll.
+    private func evaluateOnDemand(force: Bool = false) async {
+        if Self.isDemo { return }
+        let ssid = currentSSID()
+        if !force, ssid == lastSSID { return }
+        lastSSID = ssid
+        guard let ssid else { return }
+        for p in profiles where p.onDemand {
+            if p.trustedSSIDs.contains(ssid) {
+                if active?.name == p.name {
+                    addLog("On-demand: '\(ssid)' is trusted, disconnecting \(p.name)")
+                    await disconnect()
+                }
+            } else if !isConnected {
+                addLog("On-demand: '\(ssid)' is not trusted, connecting \(p.name)")
+                await connect(p.name)
+            }
+        }
+    }
+
+    func setOnDemand(_ on: Bool, for name: String) async {
+        guard let i = profiles.firstIndex(where: { $0.name == name }), profiles[i].onDemand != on else { return }
+        profiles[i].onDemand = on
+        saveProfiles()
+        if on { await evaluateOnDemand(force: true) }
+    }
+
+    func setTrustedSSIDs(_ ssids: [String], for name: String) async {
+        guard let i = profiles.firstIndex(where: { $0.name == name }) else { return }
+        profiles[i].trustedSSIDs = ssids
+        saveProfiles()
+        if profiles[i].onDemand { await evaluateOnDemand(force: true) }
     }
 
     // MARK: Test connection
