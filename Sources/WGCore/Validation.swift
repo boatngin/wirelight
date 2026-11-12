@@ -66,7 +66,7 @@ public enum Validation {
     /// A Wi-Fi SSID: 1–32 bytes, no control characters. Case-sensitive.
     public static func isValidSSID(_ s: String) -> Bool {
         guard (1...32).contains(s.utf8.count) else { return false }
-        return s.unicodeScalars.allSatisfy { !$0.properties.isControl }
+        return s.unicodeScalars.allSatisfy { $0.properties.generalCategory != .control }
     }
 
     public static func isValidTunnelName(_ s: String) -> Bool {

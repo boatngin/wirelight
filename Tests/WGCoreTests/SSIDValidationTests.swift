@@ -1,7 +1,7 @@
 import XCTest
 @testable import WGCore
 
-final class ValidationTests: XCTestCase {
+final class SSIDValidationTests: XCTestCase {
     func testValidSSIDs() {
         XCTAssertTrue(Validation.isValidSSID("a"))
         XCTAssertTrue(Validation.isValidSSID("HomeWiFi"))
