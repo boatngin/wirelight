@@ -20,6 +20,8 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     /// Connect on untrusted Wi-Fi, disconnect on trusted networks (see `trustedSSIDs`).
     var onDemand: Bool = false
     var trustedSSIDs: [String] = []
+    /// Block all non-tunnel traffic if the tunnel drops unexpectedly.
+    var killSwitch: Bool = false
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -41,9 +43,12 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
         onDemand = try c.decodeIfPresent(Bool.self, forKey: .onDemand) ?? false
         trustedSSIDs = try c.decodeIfPresent([String].self, forKey: .trustedSSIDs) ?? []
+        killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
     }
 
-    var upOptions: UpOptions { UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs) }
+    var upOptions: UpOptions {
+        UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs, killSwitch: killSwitch)
+    }
 }
 
 /// One traffic sample (bytes/second) derived from successive status polls.
@@ -280,7 +285,7 @@ final class TunnelStore: ObservableObject {
                 text = cfg.wgQuickText()
             }
             let options = profile(name)?.upOptions ?? UpOptions()
-            let request: Request = (options.splitDNSDomains.isEmpty && options.excludedCIDRs.isEmpty)
+            let request: Request = (options.splitDNSDomains.isEmpty && options.excludedCIDRs.isEmpty && !options.killSwitch)
                 ? .up(name: name, config: text)
                 : .upWithOptions(name: name, config: text, options: options)
             let r = try check(await HelperClient.send(request, timeout: 30))
@@ -410,6 +415,21 @@ final class TunnelStore: ObservableObject {
 
     func setExclusions(_ cidrs: [String], for name: String) async {
         await updateProfile(name) { $0.excludedCIDRs = cidrs }
+    }
+
+    /// Persisted for the next connect; applied live via IPC when the tunnel is active.
+    func setKillSwitch(_ on: Bool, for name: String) async {
+        guard let i = profiles.firstIndex(where: { $0.name == name }), profiles[i].killSwitch != on else { return }
+        profiles[i].killSwitch = on
+        saveProfiles()
+        guard active?.name == name else { return }
+        do {
+            _ = try check(await HelperClient.send(.setKillSwitch(name: name, enabled: on), timeout: 15))
+            addLog("Kill switch \(on ? "on" : "off") for \(name)")
+        } catch {
+            lastError = String(describing: error)
+            addLog(String(describing: error), isError: true)
+        }
     }
 
     private func updateProfile(_ name: String, _ change: (inout TunnelProfile) -> Void) async {
