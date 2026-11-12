@@ -324,6 +324,38 @@ final class TunnelStore: ObservableObject {
 
     func configText(_ name: String) -> String? { KeychainStore.load(name) }
 
+    /// Copies a tunnel's config and per-tunnel options under a free name like `home-2`.
+    func duplicate(_ name: String) {
+        guard let text = configText(name), let source = profile(name) else {
+            lastError = StoreError.missingConfig(name).description
+            return
+        }
+        var n = 2
+        while n < 1000 {
+            let suffix = "-\(n)"
+            let candidate = String(name.prefix(15 - suffix.count)) + suffix
+            guard Validation.isValidTunnelName(candidate), profile(candidate) == nil else { n += 1; continue }
+            do {
+                try importConfig(name: candidate, text: text)
+            } catch {
+                lastError = String(describing: error)
+                addLog(String(describing: error), isError: true)
+                return
+            }
+            if let i = profiles.firstIndex(where: { $0.name == candidate }) {
+                profiles[i].splitDNSDomains = source.splitDNSDomains
+                profiles[i].excludedCIDRs = source.excludedCIDRs
+                profiles[i].routeAll = source.routeAll
+                saveProfiles()
+            }
+            mainSelection = candidate
+            addLog("Duplicated \(name) as \(candidate)")
+            return
+        }
+        lastError = StoreError.invalidName.description
+        addLog(StoreError.invalidName.description, isError: true)
+    }
+
     func updateConfig(name: String, text: String) throws {
         let cfg = try WGConfig(parsing: text)
         try KeychainStore.save(text, account: name)
