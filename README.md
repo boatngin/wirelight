@@ -166,7 +166,7 @@ Planned work lives in [issues](https://github.com/boatngin/wirelight/issues). Hi
 - [ ] [On-demand rules by Wi-Fi network](https://github.com/boatngin/wirelight/issues/5)
 - [x] [Homebrew cask](https://github.com/boatngin/wirelight/issues/10)
 - [ ] [Notarized releases](https://github.com/boatngin/wirelight/issues/11)
-- [ ] [Global hotkey](https://github.com/boatngin/wirelight/issues/8)
+- [x] [Global hotkey](https://github.com/boatngin/wirelight/issues/8)
 
 Got an idea? Share it in [Discussions › Ideas](https://github.com/boatngin/wirelight/discussions/categories/ideas).
 

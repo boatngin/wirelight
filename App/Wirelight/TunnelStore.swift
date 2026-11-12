@@ -130,6 +130,7 @@ final class TunnelStore: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private let pathMonitor = NWPathMonitor()
+    private let hotKey = GlobalHotKey()
     private let locationManager = CLLocationManager()
     private var lastPathSignature: String?
     private var lastSSID: String?
@@ -139,6 +140,7 @@ final class TunnelStore: ObservableObject {
     /// Demo mode (`WIRELIGHT_DEMO=1`): sample data for screenshots, no helper,
     /// Keychain or UserDefaults access.
     static let isDemo = ProcessInfo.processInfo.environment["WIRELIGHT_DEMO"] == "1"
+    static let toggleHotKeyKey = "toggleHotKey"
 
     init() {
         if Self.isDemo {
@@ -147,6 +149,8 @@ final class TunnelStore: ObservableObject {
         }
         loadProfiles()
         selectedName = UserDefaults.standard.string(forKey: Keys.selected) ?? profiles.first?.name
+        hotKey.onTrigger = { [weak self] in Task { @MainActor in await self?.toggle() } }
+        hotKey.update(toggleHotKey)
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         startPolling()
         watchSystemEvents()
@@ -316,6 +320,15 @@ final class TunnelStore: ObservableObject {
         } catch {
             lastError = String(describing: error)
             addLog(String(describing: error), isError: true)
+        }
+    }
+
+    /// Connects the current tunnel, or disconnects when one is active (used by the global hotkey).
+    func toggle() async {
+        if isConnected {
+            await disconnect()
+        } else if let name = currentProfile?.name {
+            await connect(name)
         }
     }
 
@@ -523,6 +536,26 @@ final class TunnelStore: ObservableObject {
         profiles[i].trustedSSIDs = ssids
         saveProfiles()
         if profiles[i].onDemand { await evaluateOnDemand(force: true) }
+    }
+
+    /// Global shortcut that toggles the current tunnel; nil disables it. Defaults to ⌃⌥⌘W on first run.
+    var toggleHotKey: HotKeyCombo? {
+        get {
+            guard let dict = UserDefaults.standard.dictionary(forKey: Self.toggleHotKeyKey) as? [String: Int] else {
+                return UserDefaults.standard.object(forKey: Self.toggleHotKeyKey) == nil ? .default : nil
+            }
+            guard let code = dict["keyCode"], let mods = dict["modifiers"] else { return nil }
+            return HotKeyCombo(keyCode: UInt32(truncatingIfNeeded: code), modifiers: UInt32(truncatingIfNeeded: mods))
+        }
+        set {
+            if let c = newValue {
+                UserDefaults.standard.set(["keyCode": Int(c.keyCode), "modifiers": Int(c.modifiers)], forKey: Self.toggleHotKeyKey)
+            } else {
+                UserDefaults.standard.set([String: Int](), forKey: Self.toggleHotKeyKey)
+            }
+            hotKey.update(newValue)
+            objectWillChange.send()
+        }
     }
 
     // MARK: Test connection
