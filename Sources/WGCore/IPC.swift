@@ -9,10 +9,21 @@ public struct UpOptions: Codable, Equatable, Sendable {
     public var splitDNSDomains: [String]
     /// CIDRs that keep using the physical default route even while connected.
     public var excludedCIDRs: [String]
+    /// Block all non-tunnel traffic while this tunnel is up or has dropped unexpectedly.
+    public var killSwitch: Bool
 
-    public init(splitDNSDomains: [String] = [], excludedCIDRs: [String] = []) {
+    public init(splitDNSDomains: [String] = [], excludedCIDRs: [String] = [], killSwitch: Bool = false) {
         self.splitDNSDomains = splitDNSDomains
         self.excludedCIDRs = excludedCIDRs
+        self.killSwitch = killSwitch
+    }
+
+    /// Tolerate options sent by older clients (missing killSwitch key).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        splitDNSDomains = try c.decodeIfPresent([String].self, forKey: .splitDNSDomains) ?? []
+        excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
+        killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
     }
 
     /// Returns a description of the first invalid entry, or nil.
@@ -32,6 +43,8 @@ public enum Request: Codable, Equatable, Sendable {
     case ping
     /// Re-resolve endpoints, re-pin endpoint routes and re-apply DNS (after wake / network change).
     case refresh
+    /// Toggle the kill switch on a tunnel that is currently up (applies live, no reconnect).
+    case setKillSwitch(name: String, enabled: Bool)
     /// Helper-side diagnostics, returned in `Response.messages`.
     case doctor
 }

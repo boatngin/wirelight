@@ -51,6 +51,10 @@ func handle(_ request: Request) -> Response {
         case .refresh:
             controller.refresh()
             return Response(ok: true, status: controller.status())
+        case let .setKillSwitch(name, enabled):
+            log("request: kill switch \(name) \(enabled ? "on" : "off")")
+            try controller.setKillSwitch(name, enabled: enabled)
+            return Response(ok: true, status: controller.status())
         case .doctor:
             return Response(ok: true, messages: controller.doctor())
         case let .upWithOptions(name, config, options):

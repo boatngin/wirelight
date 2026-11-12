@@ -187,6 +187,21 @@ struct TunnelDetailView: View {
 
             Divider().padding(.horizontal, 14)
 
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Kill switch").font(.system(size: 13))
+                    Text("Block all non-tunnel traffic if the tunnel drops").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(get: { profile.killSwitch },
+                                         set: { on in Task { await store.setKillSwitch(on, for: profile.name) } }))
+                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                    .disabled(store.busy)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+
+            Divider().padding(.horizontal, 14)
+
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { showAdvanced.toggle() }
             } label: {
