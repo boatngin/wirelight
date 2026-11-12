@@ -50,13 +50,6 @@ struct SettingsView: View {
                     Button("Revert") { loadEditor(name) }
                     Button("Validate & Save") { save(name) }.keyboardShortcut("s")
                 }
-                if renaming {
-                    HStack {
-                        TextField("New name", text: $newName).frame(maxWidth: 200)
-                        Button("Cancel") { renaming = false }
-                        Button("Rename") { rename(name) }.keyboardShortcut(.return)
-                    }
-                }
                 .confirmationDialog("Delete tunnel '\(name)'?", isPresented: $confirmDelete) {
                     Button("Delete", role: .destructive) {
                         Task {
@@ -66,6 +59,13 @@ struct SettingsView: View {
                     }
                 } message: {
                     Text("The config and its private key will be removed from the Keychain.")
+                }
+                if renaming {
+                    HStack {
+                        TextField("New name", text: $newName).frame(maxWidth: 200)
+                        Button("Cancel") { renaming = false }
+                        Button("Rename") { rename(name) }.keyboardShortcut(.return)
+                    }
                 }
                 if store.active?.name == name {
                     Text("Changes apply the next time you connect.").font(.caption).foregroundStyle(.secondary)
