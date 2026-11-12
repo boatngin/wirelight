@@ -45,9 +45,16 @@ jobs:
         run: |
           FILES=(build/Wirelight.pkg "build/Wirelight-$VERSION.pkg" "build/Wirelight-$VERSION.pkg.sha256" \
                  "build/Wirelight-$VERSION.zip" "build/Wirelight-$VERSION.zip.sha256")
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${FILES[@]}" --clobber
-          else
-            gh release create "$TAG" "${FILES[@]}" --title "Wirelight $VERSION" \
-              --generate-notes --notes-file .github/release-notes-header.md
-          fi
+           if gh release view "$TAG" >/dev/null 2>&1; then
+             gh release upload "$TAG" "${FILES[@]}" --clobber
+           else
+             gh release create "$TAG" "${FILES[@]}" --title "Wirelight $VERSION" \
+               --generate-notes --notes-file .github/release-notes-header.md
+           fi
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          SHA256="$(awk '{print $1}' "build/Wirelight-$VERSION.pkg.sha256")"
+          scripts/update-homebrew-cask.sh "$VERSION" "$SHA256"
