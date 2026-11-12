@@ -11,6 +11,8 @@ struct SettingsView: View {
     @State private var message: String?
     @State private var messageIsError = false
     @State private var confirmDelete = false
+    @State private var renaming = false
+    @State private var newName = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -43,9 +45,17 @@ struct SettingsView: View {
                 }
                 HStack {
                     Button("Delete Tunnel…", role: .destructive) { confirmDelete = true }
+                    Button("Rename…") { renaming = true; newName = name }
                     Spacer()
                     Button("Revert") { loadEditor(name) }
                     Button("Validate & Save") { save(name) }.keyboardShortcut("s")
+                }
+                if renaming {
+                    HStack {
+                        TextField("New name", text: $newName).frame(maxWidth: 200)
+                        Button("Cancel") { renaming = false }
+                        Button("Rename") { rename(name) }.keyboardShortcut(.return)
+                    }
                 }
                 .confirmationDialog("Delete tunnel '\(name)'?", isPresented: $confirmDelete) {
                     Button("Delete", role: .destructive) {
@@ -79,6 +89,20 @@ struct SettingsView: View {
         do {
             try store.updateConfig(name: name, text: editorText)
             message = "Saved"
+            messageIsError = false
+        } catch {
+            message = String(describing: error)
+            messageIsError = true
+        }
+    }
+
+    private func rename(_ name: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespaces)
+        do {
+            try store.rename(name, to: trimmed)
+            renaming = false
+            selected = trimmed
+            message = "Renamed to '\(trimmed)'"
             messageIsError = false
         } catch {
             message = String(describing: error)
