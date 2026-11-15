@@ -2,7 +2,7 @@
 # Build and (re)install wgbar-helper as a LaunchDaemon. Safe to run repeatedly.
 set -euo pipefail
 
-LABEL="com.thanaboat.wgbar.helper"
+LABEL="io.github.boatngin.wirelight.helper"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
@@ -28,6 +28,8 @@ sudo install -m 755 -o root -g wheel .build/release/wgbarctl /usr/local/bin/
 
 echo "==> (Re)loading LaunchDaemon"
 sudo launchctl bootout system/$LABEL 2>/dev/null || true
+sudo launchctl bootout system/com.thanaboat.wgbar.helper 2>/dev/null || true  # installs from before the rename
+sudo rm -f /Library/LaunchDaemons/com.thanaboat.wgbar.helper.plist
 # bootout is asynchronous; wait until the job is gone before bootstrapping again
 for _ in {1..20}; do
     sudo launchctl print system/$LABEL >/dev/null 2>&1 || break

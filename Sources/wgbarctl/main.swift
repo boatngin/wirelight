@@ -23,7 +23,7 @@ func doctor() -> Never {
         if !ok && !warnOnly { failed = true }
     }
     let fm = FileManager.default
-    report(fm.fileExists(atPath: "/Library/LaunchDaemons/com.thanaboat.wgbar.helper.plist"),
+    report(fm.fileExists(atPath: "/Library/LaunchDaemons/io.github.boatngin.wirelight.helper.plist"),
            "LaunchDaemon plist installed")
     report(fm.isExecutableFile(atPath: "/Library/PrivilegedHelperTools/wgbar-helper"), "helper binary installed")
 

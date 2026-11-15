@@ -2,7 +2,7 @@
 # Stop and remove wgbar-helper. Refuses while tunnels are still up.
 set -euo pipefail
 
-LABEL="com.thanaboat.wgbar.helper"
+LABEL="io.github.boatngin.wirelight.helper"
 CTL=/usr/local/bin/wgbarctl
 
 if [[ -x $CTL ]] && $CTL ping >/dev/null 2>&1; then
@@ -17,6 +17,8 @@ fi
 
 echo "==> Unloading LaunchDaemon (sudo)"
 sudo launchctl bootout system/$LABEL 2>/dev/null || true
+sudo launchctl bootout system/com.thanaboat.wgbar.helper 2>/dev/null || true  # installs from before the rename
+sudo rm -f /Library/LaunchDaemons/com.thanaboat.wgbar.helper.plist
 
 echo "==> Removing files"
 sudo rm -f /Library/LaunchDaemons/$LABEL.plist

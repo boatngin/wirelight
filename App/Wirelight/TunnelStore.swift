@@ -142,11 +142,21 @@ final class TunnelStore: ObservableObject {
     static let isDemo = ProcessInfo.processInfo.environment["WIRELIGHT_DEMO"] == "1"
     static let toggleHotKeyKey = "toggleHotKey"
 
+    /// Copies settings saved under the pre-rename bundle id (com.thanaboat.wgbar) once.
+    private static func migrateLegacyDefaults() {
+        let legacy = "com.thanaboat.wgbar"
+        guard let id = Bundle.main.bundleIdentifier, id != legacy,
+              UserDefaults.standard.persistentDomain(forName: id)?[Keys.profiles] == nil,
+              let old = UserDefaults.standard.persistentDomain(forName: legacy) else { return }
+        UserDefaults.standard.setPersistentDomain(old, forName: id)
+    }
+
     init() {
         if Self.isDemo {
             loadDemo()
             return
         }
+        Self.migrateLegacyDefaults()
         loadProfiles()
         selectedName = UserDefaults.standard.string(forKey: Keys.selected) ?? profiles.first?.name
         hotKey.onTrigger = { [weak self] in Task { @MainActor in await self?.toggle() } }
@@ -185,7 +195,7 @@ final class TunnelStore: ObservableObject {
                 await self.evaluateOnDemand()
             }
         }
-        pathMonitor.start(queue: DispatchQueue(label: "com.thanaboat.wgbar.path"))
+        pathMonitor.start(queue: DispatchQueue(label: "io.github.boatngin.wirelight.path"))
     }
 
     /// Asks the helper to re-resolve endpoints / re-pin routes. No-op when disconnected.

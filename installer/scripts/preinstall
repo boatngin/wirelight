@@ -1,4 +1,8 @@
 #!/bin/bash
 # Stop a previously installed helper so its binary can be replaced.
+launchctl bootout system/io.github.boatngin.wirelight.helper 2>/dev/null || true
+# Releases before 2026-11 used the com.thanaboat.wgbar.* identifiers.
 launchctl bootout system/com.thanaboat.wgbar.helper 2>/dev/null || true
+rm -f /Library/LaunchDaemons/com.thanaboat.wgbar.helper.plist
+pkgutil --forget com.thanaboat.wgbar.pkg >/dev/null 2>&1 || true
 exit 0

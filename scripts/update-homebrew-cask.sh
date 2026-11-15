@@ -36,8 +36,9 @@ cask "wirelight" do
 
   pkg "Wirelight-#{version}.pkg"
 
-  uninstall pkg: "com.thanaboat.wgbar.pkg",
+  uninstall pkg: "io.github.boatngin.wirelight.pkg",
             delete: [
+              "/Library/LaunchDaemons/io.github.boatngin.wirelight.helper.plist",
               "/Library/LaunchDaemons/com.thanaboat.wgbar.helper.plist",
               "/Library/PrivilegedHelperTools/wgbar-helper",
               "/usr/local/bin/wgbarctl",
@@ -45,6 +46,7 @@ cask "wirelight" do
             ]
 
   zap trash: [
+    "~/Library/Preferences/io.github.boatngin.wirelight.plist",
     "~/Library/Preferences/com.thanaboat.wgbar.plist",
   ]
 end

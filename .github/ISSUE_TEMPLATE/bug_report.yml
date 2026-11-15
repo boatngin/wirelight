@@ -33,7 +33,7 @@ body:
     id: logs
     attributes:
       label: Helper log
-      description: "`log show --last 10m --predicate 'subsystem == \"com.thanaboat.wgbar\"'`"
+      description: "`log show --last 10m --predicate 'subsystem == \"io.github.boatngin.wirelight\"'`"
       render: text
   - type: input
     id: version

@@ -3,7 +3,9 @@ import Security
 
 /// Stores whole tunnel configs (they contain the private key) in the login keychain.
 enum KeychainStore {
-    static let service = "com.thanaboat.wgbar"
+    static let service = "io.github.boatngin.wirelight"
+    /// Service name used before the identifier rename; read once and migrated.
+    static let legacyService = "com.thanaboat.wgbar"
 
     enum KeychainError: Error, CustomStringConvertible {
         case status(OSStatus)
@@ -15,7 +17,7 @@ enum KeychainStore {
         }
     }
 
-    private static func baseQuery(_ account: String) -> [String: Any] {
+    private static func baseQuery(_ account: String, service: String = service) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
@@ -35,7 +37,17 @@ enum KeychainStore {
     }
 
     static func load(_ account: String) -> String? {
-        var q = baseQuery(account)
+        if let text = read(account, service: service) { return text }
+        // Move a config saved under the legacy service; keep the old item if the copy fails.
+        guard let text = read(account, service: legacyService) else { return nil }
+        if (try? save(text, account: account)) != nil {
+            SecItemDelete(baseQuery(account, service: legacyService) as CFDictionary)
+        }
+        return text
+    }
+
+    private static func read(_ account: String, service: String) -> String? {
+        var q = baseQuery(account, service: service)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?

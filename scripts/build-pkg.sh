@@ -39,7 +39,7 @@ install -d "$ROOT/Applications" "$ROOT/Library/PrivilegedHelperTools" "$ROOT/Lib
 ditto "$APP" "$ROOT/Applications/Wirelight.app"
 install -m 755 "$BIN/wgbar-helper" "$ROOT/Library/PrivilegedHelperTools/"
 install -m 755 "$BIN/wgbarctl" "$ROOT/usr/local/bin/"
-install -m 644 scripts/com.thanaboat.wgbar.helper.plist "$ROOT/Library/LaunchDaemons/"
+install -m 644 scripts/io.github.boatngin.wirelight.helper.plist "$ROOT/Library/LaunchDaemons/"
 install -m 755 installer/uninstall.sh "$ROOT/usr/local/share/wirelight/uninstall.sh"
 cp LICENSE "$ROOT/usr/local/share/wirelight/LICENSE"
 
@@ -51,7 +51,7 @@ pkgbuild --analyze --root "$ROOT" "$OUT/components.plist" >/dev/null
 
 echo "==> Building component package"
 pkgbuild --root "$ROOT" --component-plist "$OUT/components.plist" \
-    --scripts installer/scripts --identifier com.thanaboat.wgbar.pkg \
+    --scripts installer/scripts --identifier io.github.boatngin.wirelight.pkg \
     --version "$VERSION" --install-location / "$OUT/Wirelight-component.pkg"
 
 echo "==> Building installer"

@@ -13,7 +13,7 @@ umask(0o077)
 
 let controller = TunnelController()
 /// All controller access is serialized on this queue (socket requests + network watcher).
-let controllerQueue = DispatchQueue(label: "com.thanaboat.wgbar.controller")
+let controllerQueue = DispatchQueue(label: "io.github.boatngin.wirelight.controller")
 controllerQueue.sync { controller.recoverOnStart() }
 
 // Watch for default-route changes (Wi-Fi <-> hotspot, wake from sleep).

@@ -65,7 +65,7 @@ Or manually:
 1. Download **[Wirelight.pkg](https://github.com/boatngin/wirelight/releases/latest/download/Wirelight.pkg)** from the [latest release](https://github.com/boatngin/wirelight/releases/latest).
 2. Open it and follow the installer. It installs:
    - `Wirelight.app` in `/Applications`
-   - the helper daemon `/Library/PrivilegedHelperTools/wgbar-helper` (LaunchDaemon `com.thanaboat.wgbar.helper`)
+   - the helper daemon `/Library/PrivilegedHelperTools/wgbar-helper` (LaunchDaemon `io.github.boatngin.wirelight.helper`)
    - the CLI `/usr/local/bin/wgbarctl`
 
 > [!NOTE]
@@ -94,7 +94,7 @@ Disconnect all tunnels, then run:
 sudo /usr/local/share/wirelight/uninstall.sh
 ```
 
-Your configs stay in the login Keychain (service `com.thanaboat.wgbar`). Delete them in Keychain Access if you want.
+Your configs stay in the login Keychain (service `io.github.boatngin.wirelight`). Delete them in Keychain Access if you want.
 
 ## Using it
 
@@ -134,7 +134,7 @@ wgbarctl doctor
 
 | Problem | Fix |
 |---|---|
-| "Helper not running" banner | Reinstall the package, or run `sudo launchctl kickstart -k system/com.thanaboat.wgbar.helper` |
+| "Helper not running" banner | Reinstall the package, or run `sudo launchctl kickstart -k system/io.github.boatngin.wirelight.helper` |
 | No handshake | Check the endpoint, port forwarding and firewall on the server. Test the same file with `sudo wg-quick up file.conf` to rule out the app. |
 | DNS not restored | The helper saves your original DNS in `/Library/Application Support/WGBar/state/` and restores it on its next start |
 | Conflicts with `wg-quick` | Run `wg-quick down` before using Wirelight |
@@ -142,7 +142,7 @@ wgbarctl doctor
 Watch the helper log live:
 
 ```bash
-log stream --predicate 'subsystem == "com.thanaboat.wgbar"'
+log stream --predicate 'subsystem == "io.github.boatngin.wirelight"'
 ```
 
 ## How it works
@@ -162,11 +162,15 @@ Wirelight uses a small root helper instead of a Network Extension, so it runs wi
 
 Planned work lives in [issues](https://github.com/boatngin/wirelight/issues). Highlights:
 
-- [ ] [Kill switch](https://github.com/boatngin/wirelight/issues/4)
-- [ ] [On-demand rules by Wi-Fi network](https://github.com/boatngin/wirelight/issues/5)
+- [x] [Kill switch](https://github.com/boatngin/wirelight/issues/4)
+- [x] [On-demand rules by Wi-Fi network](https://github.com/boatngin/wirelight/issues/5)
 - [x] [Homebrew cask](https://github.com/boatngin/wirelight/issues/10)
-- [ ] [Notarized releases](https://github.com/boatngin/wirelight/issues/11)
 - [x] [Global hotkey](https://github.com/boatngin/wirelight/issues/8)
+- [ ] [Notarized releases](https://github.com/boatngin/wirelight/issues/11)
+- [ ] [Import from a QR code](https://github.com/boatngin/wirelight/issues/21)
+- [ ] [Thai localization](https://github.com/boatngin/wirelight/issues/23)
+
+Want to help? Browse [`help wanted`](https://github.com/boatngin/wirelight/labels/help%20wanted) for bigger features or [`good first issue`](https://github.com/boatngin/wirelight/labels/good%20first%20issue) for a gentle start.
 
 Got an idea? Share it in [Discussions › Ideas](https://github.com/boatngin/wirelight/discussions/categories/ideas).
 
@@ -238,6 +242,12 @@ If Wirelight is useful to you:
 - 🗣️ Tell a friend, or share it on your favourite Mac or homelab community
 - 🐛 Report bugs and 💡 suggest features
 - 🛠️ Pick up a [good first issue](https://github.com/boatngin/wirelight/labels/good%20first%20issue)
+
+### Contributors
+
+Thanks to everyone who has helped build Wirelight 💙
+
+<a href="https://github.com/boatngin/wirelight/graphs/contributors"><img src="https://contrib.rocks/image?repo=boatngin/wirelight" alt="Contributors"></a>
 
 <a href="https://star-history.com/#boatngin/wirelight&Date"><img src="https://api.star-history.com/svg?repos=boatngin/wirelight&type=Date" alt="Star history" width="480"></a>
 

@@ -51,13 +51,13 @@ sudo /usr/local/share/wirelight/uninstall.sh
 
 | อาการ | วิธีแก้ |
 |---|---|
-| แอปขึ้นแถบ "Helper not running" | ติดตั้ง pkg ใหม่ หรือรัน `sudo launchctl kickstart -k system/com.thanaboat.wgbar.helper` |
+| แอปขึ้นแถบ "Helper not running" | ติดตั้ง pkg ใหม่ หรือรัน `sudo launchctl kickstart -k system/io.github.boatngin.wirelight.helper` |
 | ไม่มี handshake | เช็ค endpoint, port forward และ firewall ฝั่ง server ลองรัน `sudo wg-quick up file.conf` เพื่อแยกว่าปัญหาอยู่ที่แอปหรือที่ config |
 | DNS ไม่คืนค่าเดิม | helper เก็บค่าเดิมไว้ที่ `/Library/Application Support/WGBar/state/` และจะคืนค่าให้ตอน start รอบถัดไป |
 
 ดู log ของ helper:
 ```bash
-log stream --predicate 'subsystem == "com.thanaboat.wgbar"'
+log stream --predicate 'subsystem == "io.github.boatngin.wirelight"'
 ```
 
 ## สำหรับนักพัฒนา

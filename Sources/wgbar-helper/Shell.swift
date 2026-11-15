@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-let logger = Logger(subsystem: "com.thanaboat.wgbar", category: "helper")
+let logger = Logger(subsystem: "io.github.boatngin.wirelight", category: "helper")
 
 /// Logs to os_log and stderr. Never pass key material here.
 func log(_ message: String, error: Bool = false) {

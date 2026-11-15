@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
     <title>Wirelight</title>
-    <organization>com.thanaboat</organization>
+    <organization>io.github.boatngin</organization>
     <domains enable_localSystem="true" enable_anywhere="false" enable_currentUserHome="false"/>
     <options customize="never" require-scripts="true" rootVolumeOnly="true" hostArchitectures="arm64,x86_64"/>
     <volume-check>
@@ -13,11 +13,11 @@
     <background file="background.png" mime-type="image/png" alignment="bottomleft" scaling="none"/>
     <background-darkAqua file="background.png" mime-type="image/png" alignment="bottomleft" scaling="none"/>
     <choices-outline>
-        <line choice="default"><line choice="com.thanaboat.wgbar.pkg"/></line>
+        <line choice="default"><line choice="io.github.boatngin.wirelight.pkg"/></line>
     </choices-outline>
     <choice id="default"/>
-    <choice id="com.thanaboat.wgbar.pkg" visible="false">
-        <pkg-ref id="com.thanaboat.wgbar.pkg"/>
+    <choice id="io.github.boatngin.wirelight.pkg" visible="false">
+        <pkg-ref id="io.github.boatngin.wirelight.pkg"/>
     </choice>
-    <pkg-ref id="com.thanaboat.wgbar.pkg" version="__VERSION__" onConclusion="none">Wirelight-component.pkg</pkg-ref>
+    <pkg-ref id="io.github.boatngin.wirelight.pkg" version="__VERSION__" onConclusion="none">Wirelight-component.pkg</pkg-ref>
 </installer-gui-script>

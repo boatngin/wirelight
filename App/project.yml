@@ -1,6 +1,6 @@
 name: Wirelight
 options:
-  bundleIdPrefix: com.thanaboat
+  bundleIdPrefix: io.github.boatngin
   deploymentTarget:
     macOS: "13.0"
 packages:
@@ -22,12 +22,13 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.utilities
+        NSLocationUsageDescription: Wirelight reads the name of the current Wi-Fi network to connect or disconnect tunnels automatically (on demand). The name is only used on this Mac and never leaves it.
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.thanaboat.wgbar
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.boatngin.wirelight
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"

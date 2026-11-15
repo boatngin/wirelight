@@ -236,7 +236,7 @@ struct LogView: View {
             HStack {
                 Text("Log").font(.title3.weight(.semibold))
                 Spacer()
-                Text("Helper log: log stream --predicate 'subsystem == \"com.thanaboat.wgbar\"'")
+                Text("Helper log: log stream --predicate 'subsystem == \"io.github.boatngin.wirelight\"'")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
