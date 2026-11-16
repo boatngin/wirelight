@@ -162,6 +162,12 @@ final class IPCTests: XCTestCase {
         XCTAssertNotNil(UpOptions(excludedCIDRs: ["10.0.0.1"]).validationError())
     }
 
+    func testPublicKeyDerivation() {
+        // Expected value from `echo <privA> | wg pubkey`.
+        XCTAssertEqual(WGInterface(privateKey: privA).publicKey, "Uw6SpKDvoZIawVvCNlXqkeaYQ8N4CguZXSHT/19BTFs=")
+        XCTAssertNil(WGInterface(privateKey: "not base64").publicKey)
+    }
+
     func testOversizedHeaderRejected() {
         XCTAssertThrowsError(try IPCFraming.length(fromHeader: Data([0x7f, 0, 0, 0])))
     }

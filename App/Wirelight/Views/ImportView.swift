@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import SwiftUI
 import UniformTypeIdentifiers
 import WGCore
@@ -45,8 +46,11 @@ struct ImportView: View {
     private var dropZone: some View {
         VStack(spacing: 8) {
             Image(systemName: "doc.badge.plus").font(.system(size: 28)).foregroundStyle(.secondary)
-            Text("Drop a WireGuard .conf file here").font(.system(size: 13))
-            Button("Choose File…", action: choose)
+            Text("Drop a WireGuard .conf file or QR code image here").font(.system(size: 13))
+            HStack {
+                Button("Choose File…", action: choose)
+                Button("Paste", action: paste).help("Paste config text or a QR code image from the clipboard")
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 130)
         .background(
@@ -66,17 +70,54 @@ struct ImportView: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [UTType(filenameExtension: "conf") ?? .data, .plainText]
+        panel.allowedContentTypes = [UTType(filenameExtension: "conf") ?? .data, .plainText, .image]
         if panel.runModal() == .OK, let url = panel.url { load(url) }
     }
 
+    private func paste() {
+        let pb = NSPasteboard.general
+        if let image = NSImage(pasteboard: pb), let tiff = image.tiffRepresentation {
+            load(qr: CIImage(data: tiff), suggestedName: "")
+        } else if let s = pb.string(forType: .string) {
+            load(text: s, suggestedName: "")
+        } else {
+            fail("The clipboard has no config text or image.")
+        }
+    }
+
     private func load(_ url: URL) {
+        let suggested = url.deletingPathExtension().lastPathComponent
+        if UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true {
+            load(qr: CIImage(contentsOf: url), suggestedName: suggested)
+        } else if let t = try? String(contentsOf: url, encoding: .utf8) {
+            load(text: t, suggestedName: suggested)
+        } else {
+            fail("Couldn't read that file as text.")
+        }
+    }
+
+    /// Decodes on-device; the payload holds a private key, so it is never logged.
+    private func load(qr image: CIImage?, suggestedName: String) {
+        let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil,
+                                  options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
+        let payload = image.flatMap { detector?.features(in: $0) }?
+            .compactMap { ($0 as? CIQRCodeFeature)?.messageString }.first
+        guard let payload else { return fail("No QR code found in that image.") }
+        load(text: payload, suggestedName: suggestedName)
+    }
+
+    private func fail(_ message: String) {
+        text = nil
+        summary = nil
+        error = message
+    }
+
+    private func load(text t: String, suggestedName: String) {
         error = nil
         do {
-            let t = try String(contentsOf: url, encoding: .utf8)
             let cfg = try WGConfig(parsing: t)
             text = t
-            if name.isEmpty { name = Self.suggestName(url.deletingPathExtension().lastPathComponent) }
+            if name.isEmpty { name = Self.suggestName(suggestedName) }
             summary = """
             Address:  \(cfg.interface.addresses.joined(separator: ", "))
             Peers:    \(cfg.peers.count)
@@ -84,9 +125,7 @@ struct ImportView: View {
             DNS:      \((cfg.interface.dns + cfg.interface.dnsSearch).joined(separator: ", ").isEmpty ? "-" : (cfg.interface.dns + cfg.interface.dnsSearch).joined(separator: ", "))
             """
         } catch {
-            text = nil
-            summary = nil
-            self.error = "Invalid config: \(error)"
+            fail("Invalid config: \(error)")
         }
     }
 

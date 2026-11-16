@@ -149,6 +149,7 @@ struct TunnelDetailView: View {
             infoRow("Interface", isActive ? (store.active?.interface ?? "-") : "-")
             infoRow("Allowed IPs", allowedIPs)
             infoRow("DNS", dns)
+            infoRow("Public key", config?.interface.publicKey ?? "-", copy: true)
             infoRow("Peer key", config?.peers.first?.publicKey ?? "-", copy: true, last: true)
         }
         .card()

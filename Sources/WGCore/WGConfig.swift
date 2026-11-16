@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum WGCore {
@@ -31,6 +32,13 @@ public struct WGInterface: Equatable, Sendable {
     public var dnsSearch: [String] = []
     public var mtu: Int?
     public var listenPort: Int?
+
+    /// Public key derived from `privateKey`; safe to share with the peer's admin.
+    public var publicKey: String? {
+        guard let raw = Data(base64Encoded: privateKey),
+              let key = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: raw) else { return nil }
+        return key.publicKey.rawRepresentation.base64EncodedString()
+    }
 }
 
 public struct WGPeer: Equatable, Sendable {
