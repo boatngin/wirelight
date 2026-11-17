@@ -3,7 +3,7 @@ import SwiftUI
 import WGCore
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case all, active, favorites, headsUp, places, doctor, create, importConfig, settings, log
+    case all, active, favorites, chains, headsUp, places, doctor, create, importConfig, settings, log
     var id: String { rawValue }
 
     var title: String {
@@ -11,6 +11,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "All Tunnels"
         case .active: return "Active"
         case .favorites: return "Favorites"
+        case .chains: return "Multi-hop"
         case .headsUp: return "Heads-up"
         case .places: return "Places"
         case .doctor: return "Network Doctor"
@@ -26,6 +27,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "list.bullet"
         case .active: return "bolt.fill"
         case .favorites: return "star.fill"
+        case .chains: return "point.3.filled.connected.trianglepath.dotted"
         case .headsUp: return "exclamationmark.bubble"
         case .places: return "mappin.and.ellipse"
         case .doctor: return "stethoscope"
@@ -41,6 +43,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return .accentColor
         case .active: return .green
         case .favorites: return .yellow
+        case .chains: return .indigo
         case .headsUp: return .orange
         case .places: return .pink
         case .doctor: return .mint
@@ -189,6 +192,8 @@ struct MainWindow: View {
             ScrollView { SettingsView().frame(maxWidth: .infinity, alignment: .leading) }
         case .log:
             LogView()
+        case .chains:
+            ChainsView()
         case .headsUp:
             HeadsUpView()
         case .places:

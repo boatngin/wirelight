@@ -8,6 +8,8 @@ struct RouteEntry: Codable, Equatable {
     var interface: String?
     /// Drop traffic for this destination (used to stop IPv6 bypassing an IPv4-only full tunnel).
     var blackhole: Bool?
+    /// Multi-hop: the exit server's address, sent into the hop tunnel.
+    var via: Bool?
 
     var targetArgs: [String] {
         if blackhole == true { return [family == "inet6" ? "::1" : "127.0.0.1", "-blackhole"] }

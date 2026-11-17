@@ -140,6 +140,11 @@ final class TunnelStore: ObservableObject {
     @Published var activePlace: Place?
     @Published var placeProblem: String?
 
+    /// Multi-hop pairs; see `ChainsView`.
+    @Published var chains: [HopChain] = []
+    /// Tunnel → the hop it was connected through.
+    @Published private(set) var viaOf: [String: String] = [:]
+
     /// Tunnel open in the builder; nil while creating a new one.
     @Published var builderTarget: String?
     /// Config text (and suggested name) handed to the builder, e.g. from Import.
@@ -223,6 +228,7 @@ final class TunnelStore: ObservableObject {
         Self.migrateLegacyDefaults()
         loadProfiles()
         places = loadPlaces()
+        chains = HopChain.load()
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                queue: .main) { _ in PlaceQuitHook.restore() }
         selectedName = UserDefaults.standard.string(forKey: Keys.selected) ?? profiles.first?.name
@@ -420,12 +426,15 @@ final class TunnelStore: ObservableObject {
         return ips.contains("0.0.0.0/0") || ips.contains("::/0")
     }
 
-    func connect(_ name: String) async {
+    /// - Parameter via: multi-hop; reach this tunnel's server through that (already up) tunnel.
+    func connect(_ name: String, via: String? = nil) async {
         if Self.isDemo { return }
         guard !isBusy(name), !isActive(name) else { return }
-        // Two tunnels cannot both own the default route: the new one takes over.
+        let via = via ?? viaOf[name]
+        // Two tunnels cannot both own the default route: the new one takes over
+        // (except its own hop, which it rides through).
         if routesAll(name) {
-            for other in activeNames where other != name && routesAll(other) {
+            for other in activeNames where other != name && other != via && routesAll(other) {
                 addLog("\(name) routes all traffic, so \(other) disconnects first")
                 await disconnect(other)
             }
@@ -440,8 +449,10 @@ final class TunnelStore: ObservableObject {
                 if !cfg.peers.isEmpty { cfg.peers[0].allowedIPs = ["0.0.0.0/0", "::/0"] }
                 text = cfg.wgQuickText()
             }
-            let options = profile(name)?.upOptions ?? UpOptions()
+            var options = profile(name)?.upOptions ?? UpOptions()
+            options.via = via
             let r = try check(await HelperClient.send(.upWithOptions(name: name, config: text, options: options), timeout: 30))
+            viaOf[name] = via
             apply(r.status)
             failures[name] = nil
             lost.remove(name)
@@ -463,8 +474,11 @@ final class TunnelStore: ObservableObject {
         guard !isBusy(name), isActive(name) else { return }
         busyNames.insert(name)
         expectedDown.insert(name)
+        // The helper also takes down tunnels that ride through this one.
+        let riders = viaOf.filter { $0.value == name }.map(\.key)
+        expectedDown.formUnion(riders)
         lastError = nil
-        defer { busyNames.remove(name); expectedDown.remove(name) }
+        defer { busyNames.remove(name); expectedDown.remove(name); expectedDown.subtract(riders) }
         do {
             let r = try check(await HelperClient.send(.down(name: name), timeout: 30))
             apply(r.status)
@@ -881,6 +895,7 @@ final class TunnelStore: ObservableObject {
         let next = Dictionary((list ?? []).map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
         for gone in Set(statuses.keys).subtracting(next.keys) {
             traffic[gone] = nil; since[gone] = nil; lastCounters[gone] = nil
+            if expectedDown.contains(gone) { viaOf[gone] = nil }
             if !expectedDown.contains(gone), helperReachable, profile(gone) != nil { connectionLost(gone) }
         }
         for (name, st) in next {
@@ -970,6 +985,8 @@ final class TunnelStore: ObservableObject {
         var home = Place(name: "Home", values: ["HomeWiFi"])
         home.dnsMode = .quad9; home.connect = ["home"]; home.shortcut = "Lights on"
         places = [home, office]
+        chains = [HopChain(hop: "office", exit: "tokyo-vps"), HopChain(hop: "home", exit: "office")]
+        viaOf["office"] = "home"
         activePlace = home
         qualitySamples["home"] = (0..<60).map { i -> QualitySample in
             let t = Double(i)
