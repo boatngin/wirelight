@@ -50,13 +50,13 @@ struct SplitCard: View {
                           validate: Validation.isValidCIDR) { list in
                     Task { await store.setExclusions(list, for: profile.name) }
                 }
-                if store.active?.name == profile.name {
+                if store.isActive(profile.name) {
                     Text("Changes reconnect the tunnel.")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
         }
-        .disabled(store.busy)
+        .disabled(store.isBusy(profile.name))
     }
 }
 

@@ -40,6 +40,7 @@
 - **Split DNS**: send only some domains (like `lan` or `corp.example`) to the tunnel's DNS.
 - **Split tunnel exclusions**: keep chosen CIDRs off the tunnel, even when routing all traffic.
 - **Route all traffic**: full-tunnel mode in one click.
+- **Several tunnels at once**: run home, office and lab side by side, each with its own switch and live speed.
 - **Stays connected**: re-resolves endpoints after sleep and network changes, and warns when the handshake goes stale.
 - **Safe by design**: keys stay in your Keychain, and the root helper rejects scripting hooks and runs only allow-listed tools. See [SECURITY.md](SECURITY.md).
 
@@ -107,7 +108,8 @@ Your configs stay in the login Keychain (service `io.github.boatngin.wirelight`)
 | Solid centre with two steady rings | Connected |
 | Hollow centre with steady rings | Connected, but no handshake for over 3 minutes |
 
-- Only one tunnel is active at a time. Switching tunnels disconnects the current one first.
+- Several tunnels can be up at once, each with its own switch. Only one can route all traffic: turning on a second route-all tunnel disconnects the first.
+- **Favorites on** connects every favorite; **All off** disconnects everything.
 - Quitting the app leaves the tunnel up on purpose. Reopen the app and it picks up the current state.
 - Scripting hooks (`PreUp`, `PostUp`, `PreDown`, `PostDown`) aren't supported. Configs that use them are rejected.
 

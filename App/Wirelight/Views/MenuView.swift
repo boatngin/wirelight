@@ -9,8 +9,15 @@ struct MenuView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var copied = false
 
-    private var connected: Bool { store.isConnected }
-    private var peer: PeerStatus? { store.active?.peers.first }
+    /// The tunnel the hero, stats and chart describe.
+    private var focus: String? { store.currentProfile?.name }
+    private var connected: Bool { focus.map(store.isActive) ?? false }
+    private var busy: Bool { focus.map(store.isBusy) ?? false }
+    private var stale: Bool { focus.map(store.isStale) ?? false }
+    private var samples: [TrafficSample] { focus.map(store.samples) ?? [] }
+    private var peer: PeerStatus? { focus.flatMap(store.status)?.peers.first }
+    /// Connected tunnels other than the focused one.
+    private var othersUp: Int { store.activeNames.filter { $0 != focus }.count }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -46,17 +53,27 @@ struct MenuView: View {
 
     private var accent: Color {
         if !connected { return .secondary }
-        return store.isHandshakeStale ? .orange : .green
+        return stale ? .orange : .green
     }
 
     private var hero: some View {
         HStack(spacing: 10) {
-            PingBadge(color: accent, animating: connected || store.busy, fast: store.busy)
+            PingBadge(color: accent, animating: connected || busy, fast: busy)
                 .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 3) {
-                Text(store.active?.name ?? store.currentProfile?.name ?? "Wirelight")
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(focus ?? "Wirelight")
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                    if othersUp > 0 {
+                        Text("+\(othersUp) on")
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().fill(Color.green.opacity(0.18)))
+                            .foregroundStyle(.green)
+                            .help("\(othersUp) more tunnel\(othersUp == 1 ? "" : "s") connected")
+                    }
+                }
                 HStack(spacing: 5) {
                     Circle().fill(accent).frame(width: 7, height: 7)
                     Text(statusText).foregroundStyle(connected ? accent : .secondary)
@@ -71,24 +88,22 @@ struct MenuView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()
-                .disabled(store.busy || !store.helperReachable || store.profiles.isEmpty)
+                .disabled(busy || !store.helperReachable || store.profiles.isEmpty)
         }
         .padding(10)
         .background(card(tint: connected ? accent : nil))
     }
 
     private var statusText: String {
-        if store.busy { return connected ? "Disconnecting…" : "Connecting…" }
-        if connected { return store.isHandshakeStale ? "Connected · no recent handshake" : "Connected" }
+        if busy { return connected ? "Disconnecting…" : "Connecting…" }
+        if connected { return stale ? "Connected · no recent handshake" : "Connected" }
         return "Disconnected"
     }
 
     private var connectedBinding: Binding<Bool> {
-        Binding(get: { store.isConnected }, set: { on in
-            Task {
-                if on, let name = store.currentProfile?.name { await store.connect(name) }
-                else if !on { await store.disconnect() }
-            }
+        Binding(get: { connected }, set: { on in
+            guard let name = focus else { return }
+            Task { on ? await store.connect(name) : await store.disconnect(name) }
         })
     }
 
@@ -98,15 +113,15 @@ struct MenuView: View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                 StatTile(icon: "arrow.down", tint: .green, title: "Download",
-                         value: rate(store.samples.last?.rx ?? 0), sub: "Total \(Format.bytes(peer?.rxBytes ?? 0))")
+                         value: rate(samples.last?.rx ?? 0), sub: "Total \(Format.bytes(peer?.rxBytes ?? 0))")
                 StatTile(icon: "arrow.up", tint: .blue, title: "Upload",
-                         value: rate(store.samples.last?.tx ?? 0), sub: "Total \(Format.bytes(peer?.txBytes ?? 0))")
-                StatTile(icon: "hand.wave", tint: store.isHandshakeStale ? .orange : .purple, title: "Handshake",
+                         value: rate(samples.last?.tx ?? 0), sub: "Total \(Format.bytes(peer?.txBytes ?? 0))")
+                StatTile(icon: "hand.wave", tint: stale ? .orange : .purple, title: "Handshake",
                          value: peer?.latestHandshake.map { Format.relative($0, now: ctx.date) } ?? "never",
-                         sub: store.isHandshakeStale ? "Stale" : "Healthy")
+                         sub: stale ? "Stale" : "Healthy")
                 StatTile(icon: "clock", tint: .teal, title: "Uptime",
-                         value: store.connectedSince.map { duration(ctx.date.timeIntervalSince($0)) } ?? "-",
-                         sub: store.active?.interface ?? "")
+                         value: focus.flatMap(store.connectedSince).map { duration(ctx.date.timeIntervalSince($0)) } ?? "-",
+                         sub: focus.flatMap(store.status)?.interface ?? "")
             }
         }
     }
@@ -120,7 +135,7 @@ struct MenuView: View {
                 legend(.blue, "Up")
             }
             Chart {
-                ForEach(store.samples) { s in
+                ForEach(samples) { s in
                     AreaMark(x: .value("t", s.date), y: .value("down", s.rx), series: .value("s", "down"))
                         .foregroundStyle(Color.green.opacity(0.15))
                         .interpolationMethod(.monotone)
@@ -137,7 +152,7 @@ struct MenuView: View {
             .chartYAxis(.hidden)
             .frame(height: 44)
             .overlay {
-                if store.samples.count < 2 {
+                if samples.count < 2 {
                     Text("Collecting…").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
@@ -148,7 +163,7 @@ struct MenuView: View {
 
     private var addressRow: some View {
         HStack(spacing: 10) {
-            if let addr = store.activeProfile?.addresses.first.map(Format.ip) {
+            if let addr = focus.flatMap(store.profile)?.addresses.first.map(Format.ip) {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(addr, forType: .string)
@@ -167,12 +182,12 @@ struct MenuView: View {
                 .help("Copy IP address")
             }
             Spacer()
-            if let p = store.activeProfile {
+            if let p = focus.flatMap(store.profile) {
                 Text("Route all").font(.system(size: 12)).foregroundStyle(.secondary)
                 Toggle("", isOn: Binding(get: { p.routeAll },
                                          set: { on in Task { await store.setRouteAll(on, for: p.name) } }))
                     .toggleStyle(.switch).controlSize(.mini).labelsHidden()
-                    .disabled(store.busy)
+                    .disabled(busy)
             }
         }
         .padding(.horizontal, 10)
@@ -184,7 +199,12 @@ struct MenuView: View {
 
     private var tunnelsCard: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Tunnels").font(.system(size: 12, weight: .semibold)).padding(.horizontal, 4).padding(.bottom, 2)
+            HStack {
+                Text("Tunnels").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                BulkActions(compact: true).controlSize(.small)
+            }
+            .padding(.horizontal, 4).padding(.bottom, 2)
             if store.profiles.isEmpty {
                 Button { openMain(.importConfig) } label: {
                     Label("Import your first config", systemImage: "plus.circle")
@@ -195,9 +215,7 @@ struct MenuView: View {
                 .padding(8)
             }
             ForEach(store.profiles) { p in
-                TunnelRow(profile: p, isActive: store.active?.name == p.name, busy: store.busy) {
-                    Task { await store.connect(p.name) }
-                }
+                TunnelRow(profile: p, focused: p.name == focus)
             }
         }
         .padding(6)

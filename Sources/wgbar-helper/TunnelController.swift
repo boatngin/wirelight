@@ -21,6 +21,8 @@ struct TunnelState: Codable {
     var killSwitch: Bool?
     /// Resolved endpoint IPs (allowed through the kill switch anchor).
     var endpointIPs: [String]?
+    /// When `up` began; orders DNS ownership between concurrent tunnels.
+    var startedAt: Date?
 }
 
 enum TunnelError: Error, CustomStringConvertible {
@@ -97,6 +99,7 @@ final class TunnelController {
         log("\(name): wireguard-go started on \(utun)")
 
         var state = TunnelState(name: name, utun: utun)
+        state.startedAt = Date()
         state.excludedCIDRs = options.excludedCIDRs
         state.killSwitch = options.killSwitch
         state.peerEndpoints = Dictionary(uniqueKeysWithValues: config.peers.compactMap { p in
@@ -118,10 +121,8 @@ final class TunnelController {
             } else {
                 try applySplitDNS(config, domains: options.splitDNSDomains, state: &state)
             }
-            if options.killSwitch {
-                do { try PFGuard.install(utun: utun, endpointIPs: state.endpointIPs ?? []) }
-                catch { log("\(name): kill switch anchor failed: \(error)", error: true) }
-            }
+            do { try syncKillSwitch() }
+            catch { log("\(name): kill switch anchor failed: \(error)", error: true) }
             log("\(name): up on \(utun) (\(state.routes.count) routes, dns \(state.dnsBackup == nil ? "unchanged" : "set"))")
         } catch {
             log("\(name): up failed, rolling back: \(error)", error: true)
@@ -242,6 +243,10 @@ final class TunnelController {
 
         var backup: [String: DNSSetting] = [:]
         for svc in try NetworkConfigurator.networkServices() {
+            // A tunnel already holds this service: keep the user's original, not its DNS.
+            if let original = otherDNSOwner(service: svc, excluding: state.name)?.dnsBackup?[svc] {
+                backup[svc] = original; continue
+            }
             do { backup[svc] = try NetworkConfigurator.currentDNS(service: svc) }
             catch { log("\(state.name): cannot read DNS for '\(svc)': \(error)", error: true) }
         }
@@ -273,35 +278,43 @@ final class TunnelController {
         guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
         guard var state = tunnels[name] else { throw TunnelError.notUp(name) }
         state.killSwitch = enabled
-        if enabled {
-            do { try PFGuard.install(utun: state.utun, endpointIPs: state.endpointIPs ?? []) }
-            catch {
-                state.killSwitch = false
-                save(state)
-                throw error
-            }
-        } else {
-            PFGuard.remove()
-        }
         save(state)
+        do { try syncKillSwitch() }
+        catch {
+            state.killSwitch = false
+            save(state)
+            try? syncKillSwitch()
+            throw error
+        }
         log("\(name): kill switch \(enabled ? "on" : "off")")
     }
 
+    /// One anchor serves every tunnel: loaded while any tracked tunnel has the kill
+    /// switch on (even one that dropped), passing all tunnel interfaces and endpoints.
+    private func syncKillSwitch() throws {
+        let all = tunnels.values.sorted { $0.name < $1.name }
+        guard all.contains(where: { $0.killSwitch == true }) else { PFGuard.remove(); return }
+        try PFGuard.install(utuns: all.map(\.utun), endpointIPs: all.flatMap { $0.endpointIPs ?? [] })
+    }
+
     /// If a kill-switch tunnel's control socket vanished (wireguard-go died), the
-    /// tunnel dropped unexpectedly: load the block anchor so traffic cannot leak.
+    /// tunnel dropped unexpectedly: reload the block anchor so traffic cannot leak.
     private func checkKillSwitches() {
         for s in tunnels.values where s.killSwitch == true && !fm.fileExists(atPath: uapiSocket(s.utun)) {
             log("\(s.name): control socket missing with kill switch on, blocking non-tunnel traffic", error: true)
-            try? PFGuard.install(utun: s.utun, endpointIPs: s.endpointIPs ?? [])
+            try? syncKillSwitch()
         }
     }
 
     /// Best-effort reverse of `up`: kill switch → DNS → routes → interface → state files.
     private func teardown(_ state: TunnelState) {
-        if state.killSwitch == true { PFGuard.remove() }
+        tunnels[state.name] = nil
+        try? syncKillSwitch()
         if let backup = state.dnsBackup {
             for (svc, setting) in backup.sorted(by: { $0.key < $1.key }) {
-                do { try NetworkConfigurator.apply(setting, to: svc) }
+                // Another tunnel still wants its DNS here: hand the service to it, not to the original.
+                let next = otherDNSOwner(service: svc, excluding: state.name)?.dnsWanted ?? setting
+                do { try NetworkConfigurator.apply(next, to: svc) }
                 catch { log("\(state.name): cannot restore DNS for '\(svc)': \(error)", error: true) }
             }
         }
@@ -313,7 +326,12 @@ final class TunnelController {
         unlink(uapiSocket(state.utun))
         unlink(nameFile(state.name))
         unlink(statePath(state.name))
-        tunnels[state.name] = nil
+    }
+
+    /// The most recently started other tunnel that has set DNS on `service`.
+    private func otherDNSOwner(service: String, excluding name: String) -> TunnelState? {
+        tunnels.values.filter { $0.name != name && $0.dnsWanted != nil && $0.dnsBackup?[service] != nil }
+            .max { ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast) }
     }
 
     // MARK: refresh (wake / network change)
@@ -334,15 +352,13 @@ final class TunnelController {
                 save(state)
                 do { try pinEndpoints(state: &state) }
                 catch { log("\(state.name): cannot re-pin endpoint routes: \(error)", error: true) }
-                if state.killSwitch == true {
-                    try? PFGuard.install(utun: state.utun, endpointIPs: state.endpointIPs ?? [])
-                }
             }
 
             if let wanted = state.dnsWanted, var backup = state.dnsBackup,
                let services = try? NetworkConfigurator.networkServices() {
                 for svc in services where backup[svc] == nil {
-                    guard let original = try? NetworkConfigurator.currentDNS(service: svc) else { continue }
+                    guard let original = otherDNSOwner(service: svc, excluding: state.name)?.dnsBackup?[svc]
+                            ?? (try? NetworkConfigurator.currentDNS(service: svc)) else { continue }
                     backup[svc] = original
                     state.dnsBackup = backup
                     save(state)
@@ -354,6 +370,7 @@ final class TunnelController {
             }
             log("\(state.name): refreshed")
         }
+        try? syncKillSwitch() // endpoint IPs may have changed
     }
 
     private var lastNetworkSignature: String?
@@ -431,12 +448,12 @@ final class TunnelController {
             }
             if fm.fileExists(atPath: uapiSocket(s.utun)) {
                 tunnels[s.name] = s
-                if s.killSwitch == true { try? PFGuard.install(utun: s.utun, endpointIPs: s.endpointIPs ?? []) }
                 log("\(s.name): re-adopted running tunnel on \(s.utun)")
             } else {
                 log("\(s.name): cleaning up stale state from previous run")
                 teardown(s)
             }
         }
+        try? syncKillSwitch()
     }
 }

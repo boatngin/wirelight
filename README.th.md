@@ -17,6 +17,7 @@
 - **Split DNS**: ใช้ DNS ของ tunnel เฉพาะ domain ที่กำหนด เช่น `lan`
 - **Split tunnel exclusions**: CIDR ที่กำหนดไม่ต้องผ่าน tunnel แม้เปิด Route all traffic อยู่
 - **Route all traffic**: ส่งทุกอย่างผ่าน tunnel ด้วยคลิกเดียว
+- **เปิดหลาย tunnel พร้อมกัน**: บ้าน ที่ทำงาน และ lab เปิดคู่กันได้ แต่ละอันมีสวิตช์และความเร็วของตัวเอง (route all ได้ทีละอัน) มีปุ่ม Favorites on และ All off
 - **ต่อเนื่อง**: resolve endpoint ใหม่หลังเครื่องตื่นจาก sleep หรือเปลี่ยนเครือข่าย และเตือนเมื่อ handshake หาย
 - **ปลอดภัย**: private key เก็บใน Keychain ส่วน helper ไม่รับคำสั่ง hook และรันเฉพาะเครื่องมือที่อยู่ใน allowlist ดูรายละเอียดที่ [SECURITY.md](SECURITY.md)
 
