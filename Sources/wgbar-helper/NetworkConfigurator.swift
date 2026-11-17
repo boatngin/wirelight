@@ -6,8 +6,11 @@ struct RouteEntry: Codable, Equatable {
     var destination: String
     var gateway: String?
     var interface: String?
+    /// Drop traffic for this destination (used to stop IPv6 bypassing an IPv4-only full tunnel).
+    var blackhole: Bool?
 
     var targetArgs: [String] {
+        if blackhole == true { return [family == "inet6" ? "::1" : "127.0.0.1", "-blackhole"] }
         if let gateway { return [gateway] }
         return ["-interface", interface ?? ""]
     }
@@ -54,6 +57,11 @@ enum NetworkConfigurator {
 
     static func addRoute(_ r: RouteEntry) throws {
         try Shell.run(.route, ["-q", "-n", "add", "-\(r.family)", r.destination] + r.targetArgs)
+    }
+
+    /// Repoints an existing route in place, so traffic never falls through to another route meanwhile.
+    static func changeRoute(_ r: RouteEntry) throws {
+        try Shell.run(.route, ["-q", "-n", "change", "-\(r.family)", r.destination] + r.targetArgs)
     }
 
     static func deleteRoute(_ r: RouteEntry) {

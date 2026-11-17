@@ -17,3 +17,15 @@ final class PFGuardTests: XCTestCase {
         XCTAssertFalse(r.contains("not-an-ip"))
     }
 }
+
+final class RouteEntryTests: XCTestCase {
+    func testBlackholeRouteTargetsLoopback() {
+        let r = RouteEntry(family: "inet6", destination: "::/1", blackhole: true)
+        XCTAssertEqual(r.targetArgs, ["::1", "-blackhole"])
+    }
+
+    func testGatewayRouteUnchanged() {
+        XCTAssertEqual(RouteEntry(family: "inet", destination: "1.2.3.4", gateway: "192.168.1.1").targetArgs, ["192.168.1.1"])
+        XCTAssertEqual(RouteEntry(family: "inet", destination: "1.2.3.4", interface: "en0").targetArgs, ["-interface", "en0"])
+    }
+}

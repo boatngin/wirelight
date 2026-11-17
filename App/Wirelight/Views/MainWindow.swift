@@ -201,7 +201,7 @@ struct TunnelCard: View {
 
     private var isActive: Bool { store.isActive(profile.name) }
     private var busy: Bool { store.isBusy(profile.name) }
-    private var accent: Color { StatusStyle.color(connected: isActive, stale: store.isStale(profile.name)) }
+    private var accent: Color { StatusStyle.color(store, profile.name) }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -217,9 +217,11 @@ struct TunnelCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Text(busy ? (isActive ? "Disconnecting…" : "Connecting…")
-                     : isActive ? (store.isStale(profile.name) ? "No recent handshake" : "Connected") : "Disconnected")
+                     : store.failures[profile.name] != nil ? "Couldn't connect"
+                     : isActive ? (store.isSilent(profile.name) ? "No answer from server"
+                                   : store.isStale(profile.name) ? "No recent handshake" : "Connected") : "Disconnected")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(isActive ? accent : .secondary)
+                    .foregroundStyle(isActive || store.failures[profile.name] != nil ? accent : .secondary)
             }
             Spacer(minLength: 6)
             if isActive {

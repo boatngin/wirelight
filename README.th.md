@@ -16,6 +16,7 @@
 - **หน้าต่าง Dashboard**: รวม tunnel ทั้งหมด รายละเอียด, Import, Settings และ Log ไว้ที่เดียว
 - **Split DNS**: ใช้ DNS ของ tunnel เฉพาะ domain ที่กำหนด เช่น `lan`
 - **Split tunnel exclusions**: CIDR ที่กำหนดไม่ต้องผ่าน tunnel แม้เปิด Route all traffic อยู่
+- **แจ้งเตือนเมื่อมีปัญหา**: บอก "No answer from server" ภายใน 25 วินาที, เชื่อมต่อไม่สำเร็จมีปุ่ม Retry, เตือน IPv6 รั่วพร้อมปุ่ม Block IPv6 และต่อใหม่เองเมื่อ tunnel หลุด
 - **Route all traffic**: ส่งทุกอย่างผ่าน tunnel ด้วยคลิกเดียว
 - **เปิดหลาย tunnel พร้อมกัน**: บ้าน ที่ทำงาน และ lab เปิดคู่กันได้ แต่ละอันมีสวิตช์และความเร็วของตัวเอง (route all ได้ทีละอัน) มีปุ่ม Favorites on และ All off
 - **ต่อเนื่อง**: resolve endpoint ใหม่หลังเครื่องตื่นจาก sleep หรือเปลี่ยนเครือข่าย และเตือนเมื่อ handshake หาย

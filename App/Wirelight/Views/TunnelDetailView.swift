@@ -21,12 +21,13 @@ struct TunnelDetailView: View {
     private var samples: [TrafficSample] { store.samples(profile.name) }
     private var config: WGConfig? { store.config(profile.name) }
     private var peer: PeerStatus? { store.status(profile.name)?.peers.first }
-    private var accent: Color { StatusStyle.color(connected: isActive, stale: stale) }
+    private var accent: Color { StatusStyle.color(store, profile.name) }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
                 hero
+                HealthStrip(names: [profile.name])
                 if let err = store.lastError {
                     Label(err, systemImage: "exclamationmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(.red)
@@ -81,7 +82,11 @@ struct TunnelDetailView: View {
     private var statusText: String {
         if !store.helperReachable { return "Helper not running" }
         if busy { return isActive ? "Disconnecting…" : "Connecting…" }
-        if isActive { return stale ? "Connected · no recent handshake" : "Connected" }
+        if isActive {
+            if store.isSilent(profile.name) { return "Connected · no answer from server" }
+            return stale ? "Connected · no recent handshake" : "Connected"
+        }
+        if store.failures[profile.name] != nil { return "Couldn't connect" }
         return "Disconnected"
     }
 
@@ -202,6 +207,24 @@ struct TunnelDetailView: View {
                     .disabled(busy)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
+
+            if store.routesAll(profile.name) && !profile.routeAll
+                && !(config?.peers.flatMap(\.allowedIPs).contains("::/0") ?? false) {
+                Divider().padding(.horizontal, 14)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Block IPv6 while connected").font(.system(size: 13))
+                        Text("This tunnel takes IPv4 only. Drop IPv6 so it can't go around the tunnel.")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(get: { profile.blockIPv6 },
+                                             set: { on in Task { await store.setBlockIPv6(on, for: profile.name) } }))
+                        .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                        .disabled(busy)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+            }
 
             Divider().padding(.horizontal, 14)
 

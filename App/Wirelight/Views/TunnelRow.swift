@@ -11,13 +11,13 @@ struct TunnelRow: View {
 
     private var isActive: Bool { store.isActive(profile.name) }
     private var busy: Bool { store.isBusy(profile.name) }
-    private var color: Color { StatusStyle.color(connected: isActive, stale: store.isStale(profile.name)) }
+    private var color: Color { StatusStyle.color(store, profile.name) }
 
     var body: some View {
         HStack(spacing: 10) {
             Group {
                 if busy { PingBadge(color: color, animating: true, fast: true) }
-                else { Circle().fill(isActive ? color : Color.secondary.opacity(0.35)).padding(3) }
+                else { Circle().fill(isActive || store.failures[profile.name] != nil ? color : Color.secondary.opacity(0.35)).padding(3) }
             }
             .frame(width: 14, height: 14)
             VStack(alignment: .leading, spacing: 1) {
@@ -27,7 +27,7 @@ struct TunnelRow: View {
                 }
                 Text(subtitle)
                     .font(.system(size: 10, design: isActive ? .monospaced : .default))
-                    .foregroundStyle(isActive ? color : .secondary)
+                    .foregroundStyle(isActive || store.failures[profile.name] != nil ? color : .secondary)
                     .lineLimit(1)
             }
             Spacer()
@@ -50,7 +50,10 @@ struct TunnelRow: View {
 
     private var subtitle: String {
         if busy { return isActive ? "Disconnecting…" : "Connecting…" }
+        if store.failures[profile.name] != nil { return "Couldn't connect" }
+        if store.lost.contains(profile.name) && !isActive { return "Connection lost · reconnecting" }
         guard isActive else { return profile.endpoint ?? "no endpoint" }
+        if store.isSilent(profile.name) { return "No answer from server" }
         let s = store.samples(profile.name).last
         return "↓ \(Format.rate(s?.rx ?? 0))  ↑ \(Format.rate(s?.tx ?? 0))"
     }

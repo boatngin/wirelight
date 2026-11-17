@@ -23,6 +23,7 @@ struct MenuView: View {
         VStack(spacing: 8) {
             if !store.helperReachable { helperBanner }
             hero
+            HealthStrip(names: store.profiles.map(\.name), compact: true)
             if let err = store.lastError {
                 Label(err, systemImage: "exclamationmark.circle.fill")
                     .font(.system(size: 11))
@@ -53,7 +54,7 @@ struct MenuView: View {
 
     private var accent: Color {
         if !connected { return .secondary }
-        return stale ? .orange : .green
+        return focus.map { StatusStyle.color(store, $0) } ?? .green
     }
 
     private var hero: some View {

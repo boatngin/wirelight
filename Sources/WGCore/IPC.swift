@@ -11,11 +11,15 @@ public struct UpOptions: Codable, Equatable, Sendable {
     public var excludedCIDRs: [String]
     /// Block all non-tunnel traffic while this tunnel is up or has dropped unexpectedly.
     public var killSwitch: Bool
+    /// When the tunnel takes all IPv4 but not IPv6, drop IPv6 instead of letting it bypass the tunnel.
+    public var blockIPv6: Bool
 
-    public init(splitDNSDomains: [String] = [], excludedCIDRs: [String] = [], killSwitch: Bool = false) {
+    public init(splitDNSDomains: [String] = [], excludedCIDRs: [String] = [], killSwitch: Bool = false,
+                blockIPv6: Bool = false) {
         self.splitDNSDomains = splitDNSDomains
         self.excludedCIDRs = excludedCIDRs
         self.killSwitch = killSwitch
+        self.blockIPv6 = blockIPv6
     }
 
     /// Tolerate options sent by older clients (missing killSwitch key).
@@ -24,6 +28,7 @@ public struct UpOptions: Codable, Equatable, Sendable {
         splitDNSDomains = try c.decodeIfPresent([String].self, forKey: .splitDNSDomains) ?? []
         excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
+        blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
     }
 
     /// Returns a description of the first invalid entry, or nil.

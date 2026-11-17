@@ -23,6 +23,10 @@ struct TunnelState: Codable {
     var endpointIPs: [String]?
     /// When `up` began; orders DNS ownership between concurrent tunnels.
     var startedAt: Date?
+    /// IPv6 is blackholed because the tunnel takes IPv4 only.
+    var blockIPv6: Bool?
+    /// The tunnel's IPv6 CIDRs, published to configd so macOS asks for AAAA records.
+    var ipv6Published: [String]?
 }
 
 enum TunnelError: Error, CustomStringConvertible {
@@ -102,6 +106,7 @@ final class TunnelController {
         state.startedAt = Date()
         state.excludedCIDRs = options.excludedCIDRs
         state.killSwitch = options.killSwitch
+        state.blockIPv6 = options.blockIPv6
         state.peerEndpoints = Dictionary(uniqueKeysWithValues: config.peers.compactMap { p in
             p.endpoint.map { (p.publicKey, $0) }
         })
@@ -116,6 +121,13 @@ final class TunnelController {
             try NetworkConfigurator.bringUp(utun)
 
             try addRoutes(config, state: &state)
+            if state.blockIPv6 == true, state.full4 == true, state.full6 != true {
+                for dest in NetworkConfigurator.expand("::/0") {
+                    try addRoute(RouteEntry(family: "inet6", destination: dest, blackhole: true), state: &state)
+                }
+                log("\(name): IPv6 blocked while connected (tunnel routes IPv4 only)")
+            }
+            publishIPv6(config, state: &state)
             if options.splitDNSDomains.isEmpty {
                 try applyDNS(config, state: &state)
             } else {
@@ -183,7 +195,9 @@ final class TunnelController {
         }
         let ips = NetworkConfigurator.resolvedEndpointIPs(utun: state.utun)
         state.endpointIPs = ips
-        let full4 = state.full4 ?? false, full6 = state.full6 ?? false
+        let full4 = state.full4 ?? false
+        // Blocked IPv6 still has to reach a v6 endpoint over the physical network.
+        let full6 = (state.full6 ?? false) || (state.blockIPv6 == true && full4)
         guard full4 || full6 else { return }
         for ip in ips {
             let fam = NetworkConfigurator.family(of: ip)
@@ -196,7 +210,83 @@ final class TunnelController {
         }
     }
 
-    private func isEndpointRoute(_ r: RouteEntry, utun: String) -> Bool { r.interface != utun }
+    private func isEndpointRoute(_ r: RouteEntry, utun: String) -> Bool { r.interface != utun && r.blackhole != true }
+
+    /// Moves endpoint and exclusion routes to the current default gateway. Routes that
+    /// stay are changed in place (never deleted first), so endpoint packets can't loop
+    /// into the tunnel during the switch; only routes that disappeared are removed.
+    private func repin(_ state: inout TunnelState) {
+        let old = state.routes.filter { isEndpointRoute($0, utun: state.utun) }
+        var fresh = state
+        fresh.routes = state.routes.filter { !isEndpointRoute($0, utun: state.utun) }
+        // Collect the wanted routes without touching the routing table.
+        var wanted: [RouteEntry] = []
+        for cidr in state.excludedCIDRs ?? [] {
+            let fam = NetworkConfigurator.family(of: String(cidr.split(separator: "/")[0]))
+            guard let def = NetworkConfigurator.defaultRoute(family: fam), def.interface != state.utun else { continue }
+            wanted.append(RouteEntry(family: fam, destination: cidr, gateway: def.gateway,
+                                     interface: def.gateway == nil ? def.interface : nil))
+        }
+        let ips = NetworkConfigurator.resolvedEndpointIPs(utun: state.utun)
+        fresh.endpointIPs = ips
+        let full4 = state.full4 ?? false
+        let full6 = (state.full6 ?? false) || (state.blockIPv6 == true && full4)
+        for ip in ips where full4 || full6 {
+            let fam = NetworkConfigurator.family(of: ip)
+            guard (fam == "inet" && full4) || (fam == "inet6" && full6),
+                  let def = NetworkConfigurator.defaultRoute(family: fam), def.interface != state.utun else { continue }
+            wanted.append(RouteEntry(family: fam, destination: ip, gateway: def.gateway,
+                                     interface: def.gateway == nil ? def.interface : nil))
+        }
+        for r in wanted {
+            do {
+                if old.contains(where: { $0.destination == r.destination && $0.family == r.family }) {
+                    if !old.contains(r) { try NetworkConfigurator.changeRoute(r) }
+                } else {
+                    try NetworkConfigurator.addRoute(r)
+                }
+                fresh.routes.append(r)
+            } catch {
+                log("\(state.name): cannot pin \(r.destination): \(error)", error: true)
+            }
+        }
+        for r in old where !wanted.contains(where: { $0.destination == r.destination && $0.family == r.family }) {
+            NetworkConfigurator.deleteRoute(r)
+        }
+        state = fresh
+        save(state)
+    }
+
+    // MARK: IPv6 state for configd
+
+    /// macOS only sends AAAA queries while some network service publishes IPv6 state,
+    /// and a utun publishes none. For a tunnel that routes ::/0 with a global IPv6
+    /// address, publish one so IPv6-only names resolve on an IPv4-only network.
+    /// shortcut: undocumented configd behaviour; re-check on new macOS releases.
+    private func publishIPv6(_ config: WGConfig, state: inout TunnelState) {
+        guard state.full6 == true else { return }
+        let v6 = config.interface.addresses.filter {
+            let ip = String($0.split(separator: "/")[0])
+            return Validation.isValidIPv6(ip) && !ip.lowercased().hasPrefix("fe80")
+        }
+        guard !v6.isEmpty else { return }
+        state.ipv6Published = v6
+        save(state)
+        if republishIPv6(state) { log("\(state.name): published IPv6 state for \(state.utun)") }
+    }
+
+    @discardableResult
+    private func republishIPv6(_ state: TunnelState) -> Bool {
+        guard let v6 = state.ipv6Published, let first = v6.first else { return false }
+        return DynamicStore.set(Self.ipv6Key(state.utun), [
+            "Addresses": v6.map { String($0.split(separator: "/")[0]) },
+            "PrefixLength": v6.map { Int($0.split(separator: "/")[1]) ?? 128 },
+            "InterfaceName": state.utun,
+            "Router": String(first.split(separator: "/")[0]),
+        ])
+    }
+
+    static func ipv6Key(_ utun: String) -> String { "State:/Network/Service/wirelight-\(utun)/IPv6" }
 
     private func addRoute(_ r: RouteEntry, state: inout TunnelState) throws {
         do {
@@ -310,6 +400,7 @@ final class TunnelController {
     private func teardown(_ state: TunnelState) {
         tunnels[state.name] = nil
         try? syncKillSwitch()
+        if state.ipv6Published != nil { DynamicStore.remove(Self.ipv6Key(state.utun)) }
         if let backup = state.dnsBackup {
             for (svc, setting) in backup.sorted(by: { $0.key < $1.key }) {
                 // Another tunnel still wants its DNS here: hand the service to it, not to the original.
@@ -347,11 +438,7 @@ final class TunnelController {
             }
 
             if state.full4 == true || state.full6 == true || !(state.excludedCIDRs ?? []).isEmpty {
-                for r in state.routes where isEndpointRoute(r, utun: state.utun) { NetworkConfigurator.deleteRoute(r) }
-                state.routes.removeAll { isEndpointRoute($0, utun: state.utun) }
-                save(state)
-                do { try pinEndpoints(state: &state) }
-                catch { log("\(state.name): cannot re-pin endpoint routes: \(error)", error: true) }
+                repin(&state)
             }
 
             if let wanted = state.dnsWanted, var backup = state.dnsBackup,
@@ -448,6 +535,7 @@ final class TunnelController {
             }
             if fm.fileExists(atPath: uapiSocket(s.utun)) {
                 tunnels[s.name] = s
+                republishIPv6(s)
                 log("\(s.name): re-adopted running tunnel on \(s.utun)")
             } else {
                 log("\(s.name): cleaning up stale state from previous run")

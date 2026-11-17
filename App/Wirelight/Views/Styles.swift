@@ -46,6 +46,13 @@ struct PillButton: View {
 }
 
 enum StatusStyle {
+    /// Color for a tunnel, folding in silence and stale handshakes.
+    @MainActor static func color(_ store: TunnelStore, _ name: String) -> Color {
+        guard store.isActive(name) else { return store.failures[name] != nil ? .red : .secondary }
+        if store.isSilent(name) { return .red }
+        return store.isStale(name) ? .orange : .green
+    }
+
     static func color(connected: Bool, stale: Bool) -> Color {
         guard connected else { return .secondary }
         return stale ? .orange : .green
