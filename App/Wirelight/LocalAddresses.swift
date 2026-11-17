@@ -10,8 +10,13 @@ enum LocalAddresses {
         all().contains { $0.v6 && ["2", "3"].contains($0.address.prefix(1)) }
     }
 
-    private static func all() -> [(address: String, v6: Bool)] {
-        var out: [(String, Bool)] = []
+    /// Addresses on the named interfaces (e.g. the wired Ethernet ports).
+    static func addresses(on names: [String]) -> [String] {
+        names.isEmpty ? [] : all().filter { names.contains($0.interface) }.map(\.address).sorted()
+    }
+
+    private static func all() -> [(address: String, v6: Bool, interface: String)] {
+        var out: [(String, Bool, String)] = []
         var head: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&head) == 0 else { return [] }
         defer { freeifaddrs(head) }
@@ -26,7 +31,7 @@ enum LocalAddresses {
                               nil, 0, NI_NUMERICHOST) == 0 else { continue }
             let addr = String(cString: host)
             if addr.lowercased().hasPrefix("fe80") { continue }
-            out.append((addr, sa.pointee.sa_family == AF_INET6))
+            out.append((addr, sa.pointee.sa_family == AF_INET6, name))
         }
         return out
     }

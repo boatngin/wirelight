@@ -17,9 +17,11 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var createdAt: Date?
     var splitDNSDomains: [String] = []
     var excludedCIDRs: [String] = []
-    /// Connect on untrusted Wi-Fi, disconnect on trusted networks (see `trustedSSIDs`).
+    /// Network rules are active for this tunnel.
     var onDemand: Bool = false
-    var trustedSSIDs: [String] = []
+    /// First matching rule decides; `otherwise` applies on any other network (nil: leave it).
+    var rules: [NetworkRule] = []
+    var otherwise: NetworkRule.Action?
     /// Block all non-tunnel traffic if the tunnel drops unexpectedly.
     var killSwitch: Bool = false
     /// Drop IPv6 while connected when the tunnel only takes IPv4 (stops IPv6 leaks).
@@ -44,9 +46,39 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         splitDNSDomains = try c.decodeIfPresent([String].self, forKey: .splitDNSDomains) ?? []
         excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
         onDemand = try c.decodeIfPresent(Bool.self, forKey: .onDemand) ?? false
-        trustedSSIDs = try c.decodeIfPresent([String].self, forKey: .trustedSSIDs) ?? []
+        otherwise = try c.decodeIfPresent(NetworkRule.Action.self, forKey: .otherwise)
+        if let saved = try c.decodeIfPresent([NetworkRule].self, forKey: .rules) {
+            rules = saved
+        } else {
+            // 0.2 kept a trusted Wi-Fi list: disconnect there, connect on any other Wi-Fi.
+            let trusted = try c.decodeIfPresent([String].self, forKey: .trustedSSIDs) ?? []
+            if !trusted.isEmpty { rules.append(NetworkRule(kind: .wifi, values: trusted, action: .disconnect)) }
+            if onDemand || !trusted.isEmpty { rules.append(NetworkRule(kind: .wifi, action: .connect)) }
+        }
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
         blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, endpoint, addresses, routeAll, favorite, createdAt, splitDNSDomains, excludedCIDRs
+        case onDemand, rules, otherwise, trustedSSIDs, killSwitch, blockIPv6
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(name, forKey: .name)
+        try c.encodeIfPresent(endpoint, forKey: .endpoint)
+        try c.encode(addresses, forKey: .addresses)
+        try c.encode(routeAll, forKey: .routeAll)
+        try c.encode(favorite, forKey: .favorite)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encode(splitDNSDomains, forKey: .splitDNSDomains)
+        try c.encode(excludedCIDRs, forKey: .excludedCIDRs)
+        try c.encode(onDemand, forKey: .onDemand)
+        try c.encode(rules, forKey: .rules)
+        try c.encodeIfPresent(otherwise, forKey: .otherwise)
+        try c.encode(killSwitch, forKey: .killSwitch)
+        try c.encode(blockIPv6, forKey: .blockIPv6)
     }
 
     var upOptions: UpOptions {
@@ -154,7 +186,9 @@ final class TunnelStore: ObservableObject {
     private let hotKey = GlobalHotKey()
     private let locationManager = CLLocationManager()
     private var lastPathSignature: String?
-    private var lastSSID: String?
+    private var lastNetwork: NetworkSnapshot?
+    /// Wired Ethernet interface names from the last network path update.
+    private var wiredInterfaces: [String] = []
     private var wakeObserver: NSObjectProtocol?
     private var notifiedStale: Set<String> = []
 
@@ -172,7 +206,11 @@ final class TunnelStore: ObservableObject {
         UserDefaults.standard.setPersistentDomain(old, forName: id)
     }
 
+    /// The running store, for App Intents (Shortcuts, Siri, Spotlight).
+    static weak var shared: TunnelStore?
+
     init() {
+        defer { Self.shared = self }
         if Self.isDemo {
             loadDemo()
             return
@@ -210,9 +248,11 @@ final class TunnelStore: ObservableObject {
             // out a new IP on the same network still triggers a refresh.
             let sig = "\(path.status)|" + path.availableInterfaces.map(\.name).joined(separator: ",")
                 + "|" + LocalAddresses.current().joined(separator: ",")
+            let wired = path.availableInterfaces.filter { $0.type == .wiredEthernet }.map(\.name)
             Task { @MainActor in
                 guard let self else { return }
                 defer { self.lastPathSignature = sig }
+                self.wiredInterfaces = wired
                 if let last = self.lastPathSignature, last != sig, path.status == .satisfied {
                     await self.helperRefresh(reason: "network change")
                 }
@@ -603,7 +643,7 @@ final class TunnelStore: ObservableObject {
         await connect(name)
     }
 
-    // MARK: On-demand (Wi-Fi rules)
+    // MARK: Network rules (on demand)
 
     /// Current Wi-Fi SSID via CoreWLAN, or nil on Ethernet / no Wi-Fi.
     /// Requires Location permission on recent macOS (requested in `init`).
@@ -613,24 +653,36 @@ final class TunnelStore: ObservableObject {
         return ssid
     }
 
-    /// Applies per-tunnel on-demand rules to the current Wi-Fi network. No-op when not
-    /// on Wi-Fi. Only acts when the SSID changed (unless `force`), so a failed connect
-    /// is not retried on every poll.
+    func currentNetwork() -> NetworkSnapshot {
+        NetworkSnapshot(wifiSSID: currentSSID(), ethernetAddresses: LocalAddresses.addresses(on: wiredInterfaces))
+    }
+
+    /// The rule (index, or nil for "otherwise") that applies to a tunnel on the current network.
+    func ruleDecision(_ name: String) -> (action: NetworkRule.Action, rule: Int?)? {
+        guard let p = profile(name), p.onDemand else { return nil }
+        return NetworkRules.decide(p.rules, fallback: p.otherwise, on: lastNetwork ?? currentNetwork())
+    }
+
+    /// Applies every tunnel's network rules. Acts only when the network changed (unless
+    /// `force`), so a manual switch isn't undone on the next poll and a failed connect
+    /// isn't retried forever.
     private func evaluateOnDemand(force: Bool = false) async {
         if Self.isDemo { return }
-        let ssid = currentSSID()
-        if !force, ssid == lastSSID { return }
-        lastSSID = ssid
-        guard let ssid else { return }
+        let net = currentNetwork()
+        if !force, net == lastNetwork { return }
+        lastNetwork = net
+        let place = net.wifiSSID.map { "Wi-Fi '\($0)'" } ?? (net.onEthernet ? "Ethernet" : "no network")
         for p in profiles where p.onDemand {
-            if p.trustedSSIDs.contains(ssid) {
-                if isActive(p.name) {
-                    addLog("On-demand: '\(ssid)' is trusted, disconnecting \(p.name)")
-                    await disconnect(p.name)
-                }
-            } else if !isActive(p.name) {
-                addLog("On-demand: '\(ssid)' is not trusted, connecting \(p.name)")
+            guard let d = NetworkRules.decide(p.rules, fallback: p.otherwise, on: net) else { continue }
+            let why = d.rule.map { "rule \($0 + 1)" } ?? "everywhere else"
+            switch d.action {
+            case .connect where !isActive(p.name):
+                addLog("Rules: \(place) → connect \(p.name) (\(why))")
                 await connect(p.name)
+            case .disconnect where isActive(p.name):
+                addLog("Rules: \(place) → disconnect \(p.name) (\(why))")
+                await disconnect(p.name)
+            default: break
             }
         }
     }
@@ -642,9 +694,10 @@ final class TunnelStore: ObservableObject {
         if on { await evaluateOnDemand(force: true) }
     }
 
-    func setTrustedSSIDs(_ ssids: [String], for name: String) async {
+    func setRules(_ rules: [NetworkRule], otherwise: NetworkRule.Action?, for name: String) async {
         guard let i = profiles.firstIndex(where: { $0.name == name }) else { return }
-        profiles[i].trustedSSIDs = ssids
+        profiles[i].rules = rules
+        profiles[i].otherwise = otherwise
         saveProfiles()
         if profiles[i].onDemand { await evaluateOnDemand(force: true) }
     }
@@ -790,6 +843,10 @@ final class TunnelStore: ObservableObject {
                                           createdAt: Date().addingTimeInterval(-86400 * Double(30 - i * 7))))
         }
         profiles[0].splitDNSDomains = ["lan", "home.arpa"]
+        profiles[0].onDemand = true
+        profiles[0].rules = [NetworkRule(kind: .wifi, values: ["HomeWiFi"], action: .disconnect),
+                             NetworkRule(kind: .ethernet, values: ["10.20.0.0/16"], action: .disconnect)]
+        profiles[0].otherwise = .connect
         profiles[0].excludedCIDRs = ["192.168.1.50/32"]
         selectedName = "home"
         mainSelection = "home"

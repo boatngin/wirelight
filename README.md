@@ -40,6 +40,8 @@
 - **Split DNS**: send only some domains (like `lan` or `corp.example`) to the tunnel's DNS.
 - **Split tunnel exclusions**: keep chosen CIDRs off the tunnel, even when routing all traffic.
 - **Route all traffic**: full-tunnel mode in one click.
+- **Network rules**: per tunnel, connect or disconnect on Wi-Fi by name, any Wi-Fi, Ethernet by subnet or any Ethernet, with an "everywhere else" action. First match wins, and the page shows which rule applies right now.
+- **Shortcuts and Siri**: Connect Tunnel, Disconnect Tunnel, Disconnect All, Connect Favorites and Get Connected Tunnels actions (also usable from Raycast through Shortcuts).
 - **Several tunnels at once**: run home, office and lab side by side, each with its own switch and live speed.
 - **Stays connected**: re-resolves endpoints after sleep, network and local IP changes, and every 2 minutes while the handshake is stale (for DDNS servers). Reconnects a tunnel that drops on its own.
 - **Heads-up when something's wrong**: "No answer from server" within 25 seconds, failed connects with a Retry button, and an IPv6 leak warning with a one-click **Block IPv6** fix.

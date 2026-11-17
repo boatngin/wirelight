@@ -65,6 +65,9 @@ struct ChipGroup: View {
     let icon: String
     let items: [String]
     let placeholder: String
+    var lowercase = true
+    /// Shown in the format error; defaults to the placeholder.
+    var example: String?
     let validate: (String) -> Bool
     let onChange: ([String]) -> Void
 
@@ -112,13 +115,14 @@ struct ChipGroup: View {
                                            style: StrokeStyle(lineWidth: 1, dash: focused || invalid ? [] : [3, 2])))
             }
             if invalid {
-                Text("Check the format, e.g. \(placeholder)").font(.system(size: 10)).foregroundStyle(.red)
+                Text("Check the format, e.g. \(example ?? placeholder)").font(.system(size: 10)).foregroundStyle(.red)
             }
         }
     }
 
     private func add() {
-        let value = draft.trimmingCharacters(in: .whitespaces).lowercased()
+        let trimmed = draft.trimmingCharacters(in: .whitespaces)
+        let value = lowercase ? trimmed.lowercased() : trimmed
         guard !value.isEmpty else { return }
         guard validate(value) else { invalid = true; return }
         if !items.contains(value) { onChange(items + [value]) }
