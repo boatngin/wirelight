@@ -169,7 +169,7 @@ public enum ConfigLint {
                          hint: "Each line is a [Section] or Key = Value. Comments start with #.")
         case let .unsupportedKey(l, k):
             return .init(line: l, severity: .error, message: "Unsupported key '\(k)'",
-                         hint: "Remove it. Wirelight understands PrivateKey, Address, DNS, MTU, ListenPort and the usual [Peer] keys.")
+                         hint: "Remove it. Wirelight understands PrivateKey, Address, DNS, MTU, ListenPort, the AmneziaWG keys (Jc, Jmin, Jmax, S1–S4, H1–H4, I1–I5) and the usual [Peer] keys.")
         case let .forbiddenKey(l, k):
             return .init(line: l, severity: .error, message: "'\(k)' is not allowed",
                          hint: "Scripts and Table are never run by Wirelight. Delete the line; split DNS and exclusions cover most uses.")
@@ -191,6 +191,8 @@ public enum ConfigLint {
         case "Endpoint": return "Use host:port, like vpn.example.com:51820 or [2001:db8::1]:51820."
         case "DNS": return "List IP addresses, or domain names to use as search domains."
         case "MTU": return "A number from 576 to 9000; 1420 is typical."
+        case let k where WGInterface.amneziaKeys.contains(k):
+            return "AmneziaWG: Jc/Jmin/Jmax/S1–S4 are whole numbers, H1–H4 a number or a range like 100-200, I1–I5 tags like <b 0x01><r 16>. Copy them exactly from the server."
         default: return "Check the value's format."
         }
     }

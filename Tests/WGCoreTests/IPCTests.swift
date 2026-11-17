@@ -38,3 +38,25 @@ final class ViaOptionTests: XCTestCase {
         XCTAssertNil(old.via)
     }
 }
+
+final class SharedRequestTests: XCTestCase {
+    func testStandardUserRequestSet() {
+        XCTAssertTrue(Request.upShared(name: "office").allowedForStandardUsers)
+        XCTAssertTrue(Request.listShared.allowedForStandardUsers)
+        XCTAssertFalse(Request.up(name: "x", config: "").allowedForStandardUsers)
+        XCTAssertFalse(Request.shareTunnel(name: "x", config: "", options: UpOptions(), policy: SharePolicy()).allowedForStandardUsers)
+        XCTAssertFalse(Request.applyPlace(nil).allowedForStandardUsers)
+        XCTAssertFalse(Request.refresh.allowedForStandardUsers)
+    }
+
+    func testResponseWithoutSharedDecodes() throws {
+        let r = try JSONDecoder().decode(Response.self, from: Data(#"{"ok":true}"#.utf8))
+        XCTAssertNil(r.shared)
+    }
+}
+
+final class SharePolicyRequestTests: XCTestCase {
+    func testPolicyChangeIsAdminOnly() {
+        XCTAssertFalse(Request.setSharePolicy(name: "x", policy: SharePolicy()).allowedForStandardUsers)
+    }
+}

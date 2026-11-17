@@ -43,7 +43,8 @@ install -d "$ROOT/Applications" "$ROOT/Library/PrivilegedHelperTools" "$ROOT/Lib
 ditto "$APP" "$ROOT/Applications/Wirelight.app"
 install -m 755 "$BIN/wgbar-helper" "$ROOT/Library/PrivilegedHelperTools/"
 install -d "$ROOT/Library/PrivilegedHelperTools/wirelight-tools"
-install -m 755 "$OUT/wg-tools/wg" "$OUT/wg-tools/wireguard-go" "$ROOT/Library/PrivilegedHelperTools/wirelight-tools/"
+install -m 755 "$OUT/wg-tools/wg" "$OUT/wg-tools/wireguard-go" "$OUT/wg-tools/awg" "$OUT/wg-tools/amneziawg-go" \
+    "$ROOT/Library/PrivilegedHelperTools/wirelight-tools/"
 install -m 644 "$OUT/wg-tools/VERSIONS" "$ROOT/Library/PrivilegedHelperTools/wirelight-tools/"
 install -m 755 "$BIN/wgbarctl" "$ROOT/usr/local/bin/"
 install -m 644 scripts/io.github.boatngin.wirelight.helper.plist "$ROOT/Library/LaunchDaemons/"

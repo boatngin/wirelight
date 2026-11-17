@@ -59,6 +59,7 @@ struct TunnelDetailView: View {
                 HStack(spacing: 6) {
                     Text(profile.name).font(.system(size: 20, weight: .semibold))
                     if profile.favorite { Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(.yellow) }
+                    engineMenu
                 }
                 HStack(spacing: 5) {
                     Circle().fill(accent).frame(width: 7, height: 7)
@@ -79,6 +80,28 @@ struct TunnelDetailView: View {
         }
         .padding(16)
         .card(tint: isActive ? accent : nil, radius: 14)
+    }
+
+    /// Engine pill: shows WireGuard or AmneziaWG; choosing applies on the next connect (reconnects if up).
+    private var engineMenu: some View {
+        let e = store.engine(profile.name)
+        let needsAmnezia = config?.interface.isAmnezia == true
+        return Menu {
+            Button("Automatic\(profile.engine == nil ? " ✓" : "")") { Task { await store.setEngine(nil, for: profile.name) } }
+            Button("WireGuard\(profile.engine == .wireguard ? " ✓" : "")") { Task { await store.setEngine(.wireguard, for: profile.name) } }
+                .disabled(needsAmnezia)
+            Button("AmneziaWG\(profile.engine == .amneziawg ? " ✓" : "")") { Task { await store.setEngine(.amneziawg, for: profile.name) } }
+        } label: {
+            Text(e == .amneziawg ? "AmneziaWG" : "WireGuard")
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 7).padding(.vertical, 2)
+                .background(Capsule().fill((e == .amneziawg ? Color.purple : Color.secondary).opacity(0.16)))
+                .foregroundStyle(e == .amneziawg ? Color.purple : .secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(needsAmnezia ? "This config has AmneziaWG keys, so it runs on AmneziaWG" : "Engine; Automatic follows the config")
     }
 
     private var statusText: String {
@@ -303,6 +326,13 @@ struct TunnelDetailView: View {
                 PillButton(icon: "pencil", title: "Edit") { store.openBuilder(edit: profile.name) }
                 PillButton(icon: "square.and.arrow.up", title: "Export") { exportConfig() }
                 PillButton(icon: "plus.square.on.square", title: "Duplicate") { store.duplicate(profile.name) }
+                if TunnelStore.isAdminUser {
+                    let isShared = store.sharedInfo(profile.name) != nil
+                    PillButton(icon: "person.2", title: isShared ? "Update share" : "Share") {
+                        Task { await store.share(profile.name, policy: store.sharedInfo(profile.name)?.policy ?? SharePolicy()) }
+                    }
+                    .help("Keep a root-only copy so every user on this Mac can use it (they never see the keys)")
+                }
                 Spacer()
             }
             if let testResult {

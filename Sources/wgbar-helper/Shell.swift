@@ -11,14 +11,15 @@ func log(_ message: String, error: Bool = false) {
 
 /// Binaries the helper may execute, resolved from a fixed allowlist of absolute paths.
 enum Tool: String {
-    case wireguardGo = "wireguard-go", wg, ifconfig, route, networksetup, pfctl, dscacheutil, killall
+    case wireguardGo = "wireguard-go", wg, amneziawgGo = "amneziawg-go", awg
+    case ifconfig, route, networksetup, pfctl, dscacheutil, killall
 
     /// Copies built from pinned sources and installed by the package (root-owned).
     static let bundledDir = "/Library/PrivilegedHelperTools/wirelight-tools"
 
     var candidates: [String] {
         switch self {
-        case .wireguardGo, .wg:
+        case .wireguardGo, .wg, .amneziawgGo, .awg:
             return ["\(Self.bundledDir)/\(rawValue)", "/opt/homebrew/bin/\(rawValue)", "/usr/local/bin/\(rawValue)"]
         case .ifconfig: return ["/sbin/ifconfig"]
         case .route: return ["/sbin/route"]

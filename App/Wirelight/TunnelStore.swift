@@ -26,6 +26,10 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var killSwitch: Bool = false
     /// Drop IPv6 while connected when the tunnel only takes IPv4 (stops IPv6 leaks).
     var blockIPv6: Bool = false
+    /// nil: follow the config (AmneziaWG when it has obfuscation keys).
+    var engine: Engine?
+
+    enum Engine: String, Codable, CaseIterable { case wireguard, amneziawg }
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -57,11 +61,12 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         }
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
         blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
+        engine = try c.decodeIfPresent(Engine.self, forKey: .engine)
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, endpoint, addresses, routeAll, favorite, createdAt, splitDNSDomains, excludedCIDRs
-        case onDemand, rules, otherwise, trustedSSIDs, killSwitch, blockIPv6
+        case onDemand, rules, otherwise, trustedSSIDs, killSwitch, blockIPv6, engine
     }
 
     func encode(to encoder: Encoder) throws {
@@ -79,11 +84,12 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         try c.encodeIfPresent(otherwise, forKey: .otherwise)
         try c.encode(killSwitch, forKey: .killSwitch)
         try c.encode(blockIPv6, forKey: .blockIPv6)
+        try c.encodeIfPresent(engine, forKey: .engine)
     }
 
     var upOptions: UpOptions {
         UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs, killSwitch: killSwitch,
-                  blockIPv6: blockIPv6)
+                  blockIPv6: blockIPv6, amnezia: engine == .amneziawg)
     }
 }
 
@@ -139,6 +145,23 @@ final class TunnelStore: ObservableObject {
     /// The Place currently applied (first match for the current network).
     @Published var activePlace: Place?
     @Published var placeProblem: String?
+
+    /// Tunnels an admin shared with every user on this Mac (no keys).
+    @Published var shared: [SharedTunnelInfo] = []
+
+    /// Marks a tunnel busy around a helper call that returns the new status list.
+    func runBusy(_ name: String, _ body: () async throws -> [TunnelStatus]?) async {
+        busyNames.insert(name)
+        expectedDown.insert(name)
+        defer { busyNames.remove(name); expectedDown.remove(name) }
+        do {
+            apply(try await body())
+            failures[name] = nil
+        } catch {
+            failures[name] = String(describing: error)
+            addLog("\(name): \(error)", isError: true)
+        }
+    }
 
     /// Multi-hop pairs; see `ChainsView`.
     @Published var chains: [HopChain] = []
@@ -349,6 +372,7 @@ final class TunnelStore: ObservableObject {
             helperReachable = true
             apply(r.status)
             checkHandshake()
+            if menuOpen || windowOpen { await refreshShared() }
         } catch {
             helperReachable = false
             apply([])
@@ -407,6 +431,17 @@ final class TunnelStore: ObservableObject {
 
     func dismissFailure(_ name: String) { failures[name] = nil; lost.remove(name) }
 
+    /// The engine a tunnel runs (or will run) on.
+    func engine(_ name: String) -> TunnelProfile.Engine {
+        if let e = statuses[name]?.engine.flatMap(TunnelProfile.Engine.init) { return e }
+        if let e = profile(name)?.engine { return e }
+        return config(name)?.interface.isAmnezia == true ? .amneziawg : .wireguard
+    }
+
+    func setEngine(_ e: TunnelProfile.Engine?, for name: String) async {
+        await updateProfile(name) { $0.engine = e }
+    }
+
     func setBlockIPv6(_ on: Bool, for name: String) async {
         await updateProfile(name) { $0.blockIPv6 = on }
     }
@@ -444,6 +479,9 @@ final class TunnelStore: ObservableObject {
         defer { busyNames.remove(name) }
         do {
             guard var text = KeychainStore.load(name) else { throw StoreError.missingConfig(name) }
+            if profile(name)?.engine == .wireguard, (try? WGConfig(parsing: text))?.interface.isAmnezia == true {
+                throw StoreError.helper("This config has AmneziaWG keys, which WireGuard can't read. Set the engine to Automatic or AmneziaWG.")
+            }
             if profile(name)?.routeAll == true {
                 var cfg = try WGConfig(parsing: text)
                 if !cfg.peers.isEmpty { cfg.peers[0].allowedIPs = ["0.0.0.0/0", "::/0"] }
@@ -975,6 +1013,7 @@ final class TunnelStore: ObservableObject {
                        rxBytes: 52_300_000, txBytes: 8_900_000, allowedIPs: ["10.20.0.0/16"])])
         traffic["office"] = demoSamples.map { TrafficSample(date: $0.date, rx: $0.rx * 0.2, tx: $0.tx * 0.3) }
         since["office"] = now.addingTimeInterval(-1800)
+        profiles[2].engine = .amneziawg
         failures["tokyo-vps"] = "wireguard-go failed: control socket for utun9 did not appear"
         quality.enabled = true
         var office = Place(name: "Office dock", kind: .ethernet, values: ["10.20.0.0/16"])
@@ -985,6 +1024,8 @@ final class TunnelStore: ObservableObject {
         var home = Place(name: "Home", values: ["HomeWiFi"])
         home.dnsMode = .quad9; home.connect = ["home"]; home.shortcut = "Lights on"
         places = [home, office]
+        shared = [SharedTunnelInfo(name: "family", endpoint: "home.example.com:51820", addresses: ["10.8.0.9/32"],
+                                   policy: SharePolicy(usersCanConnect: true, usersCanDisconnect: false))]
         chains = [HopChain(hop: "office", exit: "tokyo-vps"), HopChain(hop: "home", exit: "office")]
         viaOf["office"] = "home"
         activePlace = home

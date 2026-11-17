@@ -17,6 +17,7 @@ Include what you found, how to reproduce it, and the impact you expect. We aim t
 
 - The helper (`wgbar-helper`) listens on `/var/run/wgbar.sock` (`root:staff`, mode `0660`) and only serves users in the `admin` group, checked with `getpeereid`.
 - The calling process must also be Wirelight or `wgbarctl`: its code signature is checked by audit token (not PID, which can be swapped mid-request), and its executable and every folder above it must be root-owned, so no user can replace it. Source builds opt out with the root-owned flag file `/Library/Application Support/WGBar/allow-dev-callers`, which `scripts/install-helper.sh` creates.
+- Standard (non-admin) users may only ping, read status, list shared tunnels, and connect or disconnect a shared tunnel when its policy allows. Shared tunnel configs live in `/Library/Application Support/WGBar/shared` (root-only, `0700`/`0600`) and are never sent back to any client.
 - Requests are limited to 64 KB. Every config is validated again in the helper. Scripting hooks (`PreUp`, `PostUp`, `PreDown`, `PostDown`, `SaveConfig`, `Table`) are rejected.
 - The helper runs only allow-listed binaries (`wireguard-go`, `wg`, `ifconfig`, `route`, `networksetup`, `pfctl`, `dscacheutil`, `killall`) with a fixed argument list. It never invokes a shell and never accepts file paths from clients.
 - Private keys live in the user's login Keychain. They are never logged and never written to disk by the app. The helper writes a temporary `wg setconf` file (mode `0600`, in a root-only directory) and deletes it right away.
