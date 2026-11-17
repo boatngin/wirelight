@@ -15,10 +15,13 @@ struct TunnelDetailView: View {
     @State private var showAdvanced = false
     @State private var copiedField: String?
 
-    private var isActive: Bool { store.active?.name == profile.name }
+    private var isActive: Bool { store.isActive(profile.name) }
+    private var busy: Bool { store.isBusy(profile.name) }
+    private var stale: Bool { store.isStale(profile.name) }
+    private var samples: [TrafficSample] { store.samples(profile.name) }
     private var config: WGConfig? { store.config(profile.name) }
-    private var peer: PeerStatus? { isActive ? store.active?.peers.first : nil }
-    private var accent: Color { StatusStyle.color(connected: isActive, stale: store.isHandshakeStale) }
+    private var peer: PeerStatus? { store.status(profile.name)?.peers.first }
+    private var accent: Color { StatusStyle.color(connected: isActive, stale: stale) }
 
     var body: some View {
         ScrollView {
@@ -47,8 +50,7 @@ struct TunnelDetailView: View {
 
     private var hero: some View {
         HStack(spacing: 14) {
-            PingBadge(color: accent, animating: isActive || (store.busy && store.currentProfile?.name == profile.name),
-                      fast: store.busy)
+            PingBadge(color: accent, animating: isActive || busy, fast: busy)
                 .frame(width: 56, height: 56)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
@@ -66,11 +68,11 @@ struct TunnelDetailView: View {
             Spacer()
             Toggle("", isOn: Binding(
                 get: { isActive },
-                set: { on in Task { on ? await store.connect(profile.name) : await store.disconnect() } }))
+                set: { on in Task { on ? await store.connect(profile.name) : await store.disconnect(profile.name) } }))
                 .toggleStyle(.switch)
                 .controlSize(.large)
                 .labelsHidden()
-                .disabled(store.busy || !store.helperReachable)
+                .disabled(busy || !store.helperReachable)
         }
         .padding(16)
         .card(tint: isActive ? accent : nil, radius: 14)
@@ -78,8 +80,8 @@ struct TunnelDetailView: View {
 
     private var statusText: String {
         if !store.helperReachable { return "Helper not running" }
-        if store.busy { return "Working…" }
-        if isActive { return store.isHandshakeStale ? "Connected · no recent handshake" : "Connected" }
+        if busy { return isActive ? "Disconnecting…" : "Connecting…" }
+        if isActive { return stale ? "Connected · no recent handshake" : "Connected" }
         return "Disconnected"
     }
 
@@ -89,15 +91,15 @@ struct TunnelDetailView: View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             HStack(spacing: 8) {
                 StatTile(icon: "arrow.down", tint: .green, title: "Download",
-                         value: rate(store.samples.last?.rx ?? 0), sub: "Total \(Format.bytes(peer?.rxBytes ?? 0))")
+                         value: rate(samples.last?.rx ?? 0), sub: "Total \(Format.bytes(peer?.rxBytes ?? 0))")
                 StatTile(icon: "arrow.up", tint: .blue, title: "Upload",
-                         value: rate(store.samples.last?.tx ?? 0), sub: "Total \(Format.bytes(peer?.txBytes ?? 0))")
-                StatTile(icon: "hand.wave", tint: store.isHandshakeStale ? .orange : .purple, title: "Handshake",
+                         value: rate(samples.last?.tx ?? 0), sub: "Total \(Format.bytes(peer?.txBytes ?? 0))")
+                StatTile(icon: "hand.wave", tint: stale ? .orange : .purple, title: "Handshake",
                          value: peer?.latestHandshake.map { Format.relative($0, now: ctx.date) } ?? "never",
-                         sub: store.isHandshakeStale ? "Stale" : "Healthy")
+                         sub: stale ? "Stale" : "Healthy")
                 StatTile(icon: "clock", tint: .teal, title: "Uptime",
-                         value: store.connectedSince.map { duration(ctx.date.timeIntervalSince($0)) } ?? "-",
-                         sub: store.active?.interface ?? "")
+                         value: store.connectedSince(profile.name).map { duration(ctx.date.timeIntervalSince($0)) } ?? "-",
+                         sub: store.status(profile.name)?.interface ?? "")
             }
         }
     }
@@ -111,7 +113,7 @@ struct TunnelDetailView: View {
                 legend(.blue, "Up")
             }
             Chart {
-                ForEach(store.samples) { s in
+                ForEach(samples) { s in
                     AreaMark(x: .value("t", s.date), y: .value("down", s.rx), series: .value("s", "down"))
                         .foregroundStyle(Color.green.opacity(0.15))
                         .interpolationMethod(.monotone)
@@ -133,7 +135,7 @@ struct TunnelDetailView: View {
             }
             .frame(height: 110)
             .overlay {
-                if store.samples.count < 2 { Text("Collecting…").font(.system(size: 11)).foregroundStyle(.secondary) }
+                if samples.count < 2 { Text("Collecting…").font(.system(size: 11)).foregroundStyle(.secondary) }
             }
         }
         .padding(12)
@@ -146,7 +148,7 @@ struct TunnelDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             cardTitle("Connection", icon: "point.3.connected.trianglepath.dotted")
             infoRow("Address", config?.interface.addresses.joined(separator: ", ") ?? "-", copy: true)
-            infoRow("Interface", isActive ? (store.active?.interface ?? "-") : "-")
+            infoRow("Interface", store.status(profile.name)?.interface ?? "-")
             infoRow("Allowed IPs", allowedIPs)
             infoRow("DNS", dns)
             infoRow("Public key", config?.interface.publicKey ?? "-", copy: true)
@@ -167,7 +169,7 @@ struct TunnelDetailView: View {
                 Toggle("", isOn: Binding(get: { profile.routeAll },
                                          set: { on in Task { await store.setRouteAll(on, for: profile.name) } }))
                     .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                    .disabled(store.busy)
+                    .disabled(busy)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
 
@@ -197,7 +199,7 @@ struct TunnelDetailView: View {
                 Toggle("", isOn: Binding(get: { profile.killSwitch },
                                          set: { on in Task { await store.setKillSwitch(on, for: profile.name) } }))
                     .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                    .disabled(store.busy)
+                    .disabled(busy)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
 

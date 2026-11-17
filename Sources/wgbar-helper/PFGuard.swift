@@ -23,13 +23,16 @@ enum PFGuard {
                            "224.0.0.0/4", "255.255.255.255/32",
                            "fe80::/10", "fc00::/7", "ff00::/8"]
 
-    static func rules(utun: String, endpointIPs: [String]) -> String {
-        var lines = [marker,
-                     "pass quick on lo0 all",
-                     "pass quick on \(utun) all",
-                     // DHCP, so the machine can still get an address on a new network.
-                     "pass quick proto udp from any port 68 to any port 67",
-                     "pass quick proto udp from any port 67 to any port 68"]
+    /// Every connected tunnel interface stays open, so one tunnel's kill switch
+    /// never blocks another tunnel that is up at the same time.
+    static func rules(utuns: [String], endpointIPs: [String]) -> String {
+        var lines = [marker, "pass quick on lo0 all"]
+        for utun in utuns where utun.range(of: "^utun[0-9]+$", options: .regularExpression) != nil {
+            lines.append("pass quick on \(utun) all")
+        }
+        // DHCP, so the machine can still get an address on a new network.
+        lines += ["pass quick proto udp from any port 68 to any port 67",
+                  "pass quick proto udp from any port 67 to any port 68"]
         for ip in endpointIPs where Validation.isValidIP(ip) {
             lines.append("pass quick to \(ip)")
             lines.append("pass quick from \(ip)")
@@ -44,8 +47,8 @@ enum PFGuard {
 
     /// Writes the anchor file, loads it into pf and takes a pf enable reference.
     /// Safe to call repeatedly (rules are replaced, the token is taken once).
-    static func install(utun: String, endpointIPs: [String]) throws {
-        try rules(utun: utun, endpointIPs: endpointIPs).write(toFile: anchorPath, atomically: true, encoding: .utf8)
+    static func install(utuns: [String], endpointIPs: [String]) throws {
+        try rules(utuns: utuns, endpointIPs: endpointIPs).write(toFile: anchorPath, atomically: true, encoding: .utf8)
         chmod(anchorPath, 0o644)
         try Shell.run(.pfctl, ["-a", anchor, "-f", anchorPath])
         if loadToken() == nil {

@@ -71,7 +71,7 @@ struct SettingsView: View {
                         Button("Rename") { rename(name) }.keyboardShortcut(.return)
                     }
                 }
-                if store.active?.name == name {
+                if store.isActive(name) {
                     Text("Changes apply the next time you connect.").font(.caption).foregroundStyle(.secondary)
                 }
             } else {

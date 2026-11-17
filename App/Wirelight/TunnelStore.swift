@@ -89,12 +89,11 @@ final class TunnelStore: ObservableObject {
     static let staleAfter: TimeInterval = 180
 
     @Published private(set) var profiles: [TunnelProfile] = []
-    @Published private(set) var active: TunnelStatus? {
-        didSet { activeChanged(from: oldValue) }
-    }
-    /// Traffic for the active tunnel over the last 60 seconds.
-    @Published private(set) var samples: [TrafficSample] = []
-    @Published private(set) var connectedSince: Date?
+    /// Every tunnel the helper reports as up, keyed by name.
+    @Published private(set) var statuses: [String: TunnelStatus] = [:]
+    /// Traffic per connected tunnel over the last 60 seconds.
+    @Published private(set) var traffic: [String: [TrafficSample]] = [:]
+    @Published private(set) var since: [String: Date] = [:]
     @Published private(set) var log: [LogEntry] = []
     /// Which page the dashboard window shows (set by menu shortcuts too).
     @Published var mainSection: SidebarItem? = .all
@@ -106,11 +105,14 @@ final class TunnelStore: ObservableObject {
     var windowOpen = false {
         didSet { if windowOpen && !oldValue { Task { await refresh() } } }
     }
-    private var lastCounters: (date: Date, rx: UInt64, tx: UInt64)?
+    private var lastCounters: [String: (date: Date, rx: UInt64, tx: UInt64)] = [:]
     @Published private(set) var helperReachable = true
-    @Published private(set) var busy = false {
+    /// Tunnels with a connect or disconnect in flight.
+    @Published private(set) var busyNames: Set<String> = [] {
         didSet { busy ? startIconAnimation() : stopIconAnimation() }
     }
+    var busy: Bool { !busyNames.isEmpty }
+    func isBusy(_ name: String) -> Bool { busyNames.contains(name) }
     @Published private(set) var iconFrame = 0
     private var iconTimer: Timer?
     @Published var lastError: String?
@@ -135,7 +137,7 @@ final class TunnelStore: ObservableObject {
     private var lastPathSignature: String?
     private var lastSSID: String?
     private var wakeObserver: NSObjectProtocol?
-    private var notifiedStale = false
+    private var notifiedStale: Set<String> = []
 
     /// Demo mode (`WIRELIGHT_DEMO=1`): sample data for screenshots, no helper,
     /// Keychain or UserDefaults access.
@@ -202,16 +204,28 @@ final class TunnelStore: ObservableObject {
     func helperRefresh(reason: String) async {
         guard isConnected, !busy else { return }
         if let r = try? await HelperClient.send(.refresh, timeout: 15), r.ok {
-            active = r.status?.first
+            apply(r.status)
         }
     }
 
-    var isConnected: Bool { active != nil }
+    var isConnected: Bool { !statuses.isEmpty }
+    func isActive(_ name: String) -> Bool { statuses[name] != nil }
+    func status(_ name: String) -> TunnelStatus? { statuses[name] }
+    func samples(_ name: String) -> [TrafficSample] { traffic[name] ?? [] }
+    func connectedSince(_ name: String) -> Date? { since[name] }
+    /// Connected tunnels in list order.
+    var activeNames: [String] { profiles.map(\.name).filter(isActive) }
+
+    /// The tunnel the menu hero shows: the selected one if it is up, else the first one up.
+    var active: TunnelStatus? {
+        if let n = selectedName, let s = statuses[n] { return s }
+        return activeNames.first.flatMap { statuses[$0] } ?? statuses.values.sorted { $0.name < $1.name }.first
+    }
 
     var iconState: IconState {
         if busy { return .connecting(frame: iconFrame) }
         guard isConnected else { return .disconnected }
-        return isHandshakeStale ? .stale : .connected
+        return statuses.keys.contains(where: isStale) ? .stale : .connected
     }
 
     private func startIconAnimation() {
@@ -229,8 +243,8 @@ final class TunnelStore: ObservableObject {
     var activeProfile: TunnelProfile? { active.flatMap { profile($0.name) } }
     var currentProfile: TunnelProfile? { activeProfile ?? selectedName.flatMap(profile) ?? profiles.first }
 
-    var isHandshakeStale: Bool {
-        guard let hs = active?.peers.first?.latestHandshake else { return false }
+    func isStale(_ name: String) -> Bool {
+        guard let hs = statuses[name]?.peers.first?.latestHandshake else { return false }
         return Date().timeIntervalSince(hs) > Self.staleAfter
     }
 
@@ -256,22 +270,24 @@ final class TunnelStore: ObservableObject {
         do {
             let r = try await HelperClient.send(.status)
             helperReachable = true
-            active = r.status?.first
+            apply(r.status)
             checkHandshake()
         } catch {
             helperReachable = false
-            active = nil
+            apply([])
         }
         await evaluateOnDemand()
     }
 
     private func checkHandshake() {
-        guard let a = active else { notifiedStale = false; return }
-        let stale = isHandshakeStale
-        if stale && !notifiedStale {
-            notify("Handshake lost", "\(a.name): no handshake for over 3 minutes")
+        notifiedStale.formIntersection(statuses.keys)
+        for name in statuses.keys.sorted() {
+            let stale = isStale(name)
+            if stale && !notifiedStale.contains(name) {
+                notify("Handshake lost", "\(name): no handshake for over 3 minutes")
+            }
+            if stale { notifiedStale.insert(name) } else { notifiedStale.remove(name) }
         }
-        notifiedStale = stale
     }
 
     // MARK: Connect / disconnect
@@ -282,18 +298,27 @@ final class TunnelStore: ObservableObject {
         return r
     }
 
+    /// True when the tunnel would take the default route (route all, or 0.0.0.0/0 / ::/0 in the config).
+    func routesAll(_ name: String) -> Bool {
+        if profile(name)?.routeAll == true { return true }
+        let ips = config(name)?.peers.flatMap(\.allowedIPs) ?? []
+        return ips.contains("0.0.0.0/0") || ips.contains("::/0")
+    }
+
     func connect(_ name: String) async {
         if Self.isDemo { return }
-        guard !busy, active?.name != name else { return }
-        busy = true
-        lastError = nil
-        defer { busy = false }
-        do {
-            // Only one tunnel at a time.
-            if let current = active {
-                try check(await HelperClient.send(.down(name: current.name), timeout: 30))
-                active = nil
+        guard !isBusy(name), !isActive(name) else { return }
+        // Two tunnels cannot both own the default route: the new one takes over.
+        if routesAll(name) {
+            for other in activeNames where other != name && routesAll(other) {
+                addLog("\(name) routes all traffic, so \(other) disconnects first")
+                await disconnect(other)
             }
+        }
+        busyNames.insert(name)
+        lastError = nil
+        defer { busyNames.remove(name) }
+        do {
             guard var text = KeychainStore.load(name) else { throw StoreError.missingConfig(name) }
             if profile(name)?.routeAll == true {
                 var cfg = try WGConfig(parsing: text)
@@ -305,9 +330,9 @@ final class TunnelStore: ObservableObject {
                 ? .up(name: name, config: text)
                 : .upWithOptions(name: name, config: text, options: options)
             let r = try check(await HelperClient.send(request, timeout: 30))
-            active = r.status?.first { $0.name == name }
+            apply(r.status)
             selectedName = name
-            notifiedStale = false
+            notifiedStale.remove(name)
             notify("Connected", name)
             addLog("Connected \(name)")
         } catch {
@@ -316,30 +341,37 @@ final class TunnelStore: ObservableObject {
         }
     }
 
-    func disconnect() async {
+    func disconnect(_ name: String) async {
         if Self.isDemo { return }
-        guard !busy, let current = active else { return }
-        busy = true
+        guard !isBusy(name), isActive(name) else { return }
+        busyNames.insert(name)
         lastError = nil
-        defer { busy = false }
+        defer { busyNames.remove(name) }
         do {
-            try check(await HelperClient.send(.down(name: current.name), timeout: 30))
-            active = nil
-            notify("Disconnected", current.name)
-            addLog("Disconnected \(current.name)")
+            let r = try check(await HelperClient.send(.down(name: name), timeout: 30))
+            apply(r.status)
+            notify("Disconnected", name)
+            addLog("Disconnected \(name)")
         } catch {
             lastError = String(describing: error)
             addLog(String(describing: error), isError: true)
         }
     }
 
-    /// Connects the current tunnel, or disconnects when one is active (used by the global hotkey).
+    /// Disconnects every connected tunnel.
+    func disconnectAll() async {
+        for name in activeNames { await disconnect(name) }
+    }
+
+    /// Connects every favorite (a route-all favorite wins over earlier ones).
+    func connectFavorites() async {
+        for p in profiles where p.favorite && !isActive(p.name) { await connect(p.name) }
+    }
+
+    /// Hotkey: disconnects the tunnel shown in the menu, or connects the current one when none is up.
     func toggle() async {
-        if isConnected {
-            await disconnect()
-        } else if let name = currentProfile?.name {
-            await connect(name)
-        }
+        guard let name = currentProfile?.name else { return }
+        isActive(name) ? await disconnect(name) : await connect(name)
     }
 
     /// Switches between the config's AllowedIPs and 0.0.0.0/0, ::/0. Reconnects if active.
@@ -347,10 +379,13 @@ final class TunnelStore: ObservableObject {
         guard let i = profiles.firstIndex(where: { $0.name == name }), profiles[i].routeAll != on else { return }
         profiles[i].routeAll = on
         saveProfiles()
-        if active?.name == name {
-            await disconnect()
-            await connect(name)
-        }
+        await reconnectIfActive(name)
+    }
+
+    private func reconnectIfActive(_ name: String) async {
+        guard isActive(name) else { return }
+        await disconnect(name)
+        await connect(name)
     }
 
     // MARK: Profiles
@@ -414,7 +449,7 @@ final class TunnelStore: ObservableObject {
     }
 
     func delete(_ name: String) async {
-        if active?.name == name { await disconnect() }
+        if isActive(name) { await disconnect(name) }
         KeychainStore.delete(name)
         configs[name] = nil
         addLog("Deleted \(name)")
@@ -427,7 +462,7 @@ final class TunnelStore: ObservableObject {
         guard oldName != newName else { return }
         guard Validation.isValidTunnelName(newName) else { throw StoreError.invalidName }
         guard profile(newName) == nil else { throw StoreError.duplicateName(newName) }
-        guard active?.name != oldName else { throw StoreError.activeTunnel(oldName) }
+        guard !isActive(oldName) else { throw StoreError.activeTunnel(oldName) }
         if !Self.isDemo {
             guard let text = KeychainStore.load(oldName) else { throw StoreError.missingConfig(oldName) }
             try KeychainStore.save(text, account: newName)
@@ -467,7 +502,7 @@ final class TunnelStore: ObservableObject {
         guard let i = profiles.firstIndex(where: { $0.name == name }), profiles[i].killSwitch != on else { return }
         profiles[i].killSwitch = on
         saveProfiles()
-        guard active?.name == name else { return }
+        guard isActive(name) else { return }
         do {
             _ = try check(await HelperClient.send(.setKillSwitch(name: name, enabled: on), timeout: 15))
             addLog("Kill switch \(on ? "on" : "off") for \(name)")
@@ -481,10 +516,7 @@ final class TunnelStore: ObservableObject {
         guard let i = profiles.firstIndex(where: { $0.name == name }) else { return }
         change(&profiles[i])
         saveProfiles()
-        if active?.name == name {
-            await disconnect()
-            await connect(name)
-        }
+        await reconnectIfActive(name)
     }
 
     // MARK: Connect on launch
@@ -523,11 +555,11 @@ final class TunnelStore: ObservableObject {
         guard let ssid else { return }
         for p in profiles where p.onDemand {
             if p.trustedSSIDs.contains(ssid) {
-                if active?.name == p.name {
+                if isActive(p.name) {
                     addLog("On-demand: '\(ssid)' is trusted, disconnecting \(p.name)")
-                    await disconnect()
+                    await disconnect(p.name)
                 }
-            } else if !isConnected {
+            } else if !isActive(p.name) {
                 addLog("On-demand: '\(ssid)' is not trusted, connecting \(p.name)")
                 await connect(p.name)
             }
@@ -624,26 +656,30 @@ final class TunnelStore: ObservableObject {
         if log.count > 500 { log.removeFirst(log.count - 500) }
     }
 
-    private func activeChanged(from old: TunnelStatus?) {
-        if active?.name != old?.name {
-            samples = []
-            lastCounters = nil
-            connectedSince = active == nil ? nil : Date()
-        }
-        guard let peer = active?.peers.first else { return }
+    /// Replaces the connected set with the helper's report and derives per-tunnel rates.
+    private func apply(_ list: [TunnelStatus]?) {
         let now = Date()
-        if let last = lastCounters, now.timeIntervalSince(last.date) > 0.5 {
-            let dt = now.timeIntervalSince(last.date)
-            let rx = Double(peer.rxBytes &- last.rx) / dt
-            let tx = Double(peer.txBytes &- last.tx) / dt
-            if peer.rxBytes >= last.rx && peer.txBytes >= last.tx {
-                samples.append(TrafficSample(date: now, rx: rx, tx: tx))
-                samples.removeAll { now.timeIntervalSince($0.date) > 60 }
+        let next = Dictionary((list ?? []).map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
+        for gone in Set(statuses.keys).subtracting(next.keys) {
+            traffic[gone] = nil; since[gone] = nil; lastCounters[gone] = nil
+        }
+        for (name, st) in next {
+            if since[name] == nil { since[name] = now }
+            guard let peer = st.peers.first else { continue }
+            if let last = lastCounters[name] {
+                let dt = now.timeIntervalSince(last.date)
+                guard dt > 0.5 else { continue }
+                if peer.rxBytes >= last.rx && peer.txBytes >= last.tx {
+                    var list = traffic[name] ?? []
+                    list.append(TrafficSample(date: now, rx: Double(peer.rxBytes - last.rx) / dt,
+                                              tx: Double(peer.txBytes - last.tx) / dt))
+                    list.removeAll { now.timeIntervalSince($0.date) > 60 }
+                    traffic[name] = list
+                }
             }
+            lastCounters[name] = (now, peer.rxBytes, peer.txBytes)
         }
-        if lastCounters == nil || now.timeIntervalSince(lastCounters!.date) > 0.5 {
-            lastCounters = (now, peer.rxBytes, peer.txBytes)
-        }
+        statuses = next
     }
 
     private func loadDemo() {
@@ -682,14 +718,20 @@ final class TunnelStore: ObservableObject {
                                  rx: max(0, 180_000 + 140_000 * sin(t / 3.2) + 60_000 * sin(t * 1.7)),
                                  tx: max(0, 40_000 + 30_000 * sin(t / 2.5 + 1) + 15_000 * cos(t * 1.3)))
         }
-        lastCounters = nil
-        active = TunnelStatus(name: "home", interface: "utun7", peers: [
+        statuses["home"] = TunnelStatus(name: "home", interface: "utun7", peers: [
             PeerStatus(publicKey: peers[0], endpoint: "203.0.113.10:51820",
                        latestHandshake: now.addingTimeInterval(-12),
                        rxBytes: 1_284_000_000, txBytes: 214_500_000,
                        allowedIPs: ["192.168.1.0/24", "10.8.0.0/24"])])
-        samples = demoSamples
-        connectedSince = now.addingTimeInterval(-(3600 * 2 + 1260))
+        traffic["home"] = demoSamples
+        since["home"] = now.addingTimeInterval(-(3600 * 2 + 1260))
+        // A second tunnel up at the same time, to show multi-tunnel views.
+        statuses["office"] = TunnelStatus(name: "office", interface: "utun8", peers: [
+            PeerStatus(publicKey: peers[1], endpoint: "198.51.100.20:51820",
+                       latestHandshake: now.addingTimeInterval(-41),
+                       rxBytes: 52_300_000, txBytes: 8_900_000, allowedIPs: ["10.20.0.0/16"])])
+        traffic["office"] = demoSamples.map { TrafficSample(date: $0.date, rx: $0.rx * 0.2, tx: $0.tx * 0.3) }
+        since["office"] = now.addingTimeInterval(-1800)
         addLog("Imported home")
         addLog("Connected home")
         addLog("Test home: 10.8.0.1: avg 18.4 ms · 0.0% packet loss")

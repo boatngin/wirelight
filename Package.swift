@@ -14,5 +14,6 @@ let package = Package(
         .executableTarget(name: "wgbar-helper", dependencies: ["WGCore"]),
         .executableTarget(name: "wgbarctl", dependencies: ["WGCore"]),
         .testTarget(name: "WGCoreTests", dependencies: ["WGCore"]),
+        .testTarget(name: "HelperTests", dependencies: ["wgbar-helper"]),
     ]
 )
