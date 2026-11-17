@@ -3,7 +3,7 @@ import SwiftUI
 import WGCore
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case all, active, favorites, create, importConfig, settings, log
+    case all, active, favorites, headsUp, create, importConfig, settings, log
     var id: String { rawValue }
 
     var title: String {
@@ -11,6 +11,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "All Tunnels"
         case .active: return "Active"
         case .favorites: return "Favorites"
+        case .headsUp: return "Heads-up"
         case .create: return "New Tunnel"
         case .importConfig: return "Import"
         case .settings: return "Settings"
@@ -23,6 +24,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "list.bullet"
         case .active: return "bolt.fill"
         case .favorites: return "star.fill"
+        case .headsUp: return "exclamationmark.bubble"
         case .create: return "square.and.pencil"
         case .importConfig: return "square.and.arrow.down"
         case .settings: return "gearshape"
@@ -35,6 +37,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return .accentColor
         case .active: return .green
         case .favorites: return .yellow
+        case .headsUp: return .orange
         case .create: return .teal
         case .importConfig: return .purple
         case .settings: return .secondary
@@ -96,17 +99,25 @@ struct MainWindow: View {
                     }
                     Spacer()
                     if item == .active && store.isConnected {
-                        Text("\(store.activeNames.count)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
-                            .background(Circle().fill(Color.green))
+                        countBadge(store.activeNames.count, .green)
+                    }
+                    if item == .headsUp {
+                        let n = store.profiles.reduce(0) { $0 + store.notices(for: $1.name).count }
+                        if n > 0 { countBadge(n, .orange) }
                     }
                 }
                 .tag(item)
             }
         }
         .listStyle(.sidebar)
+    }
+
+    private func countBadge(_ n: Int, _ color: Color) -> some View {
+        Text("\(n)")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(minWidth: 18, minHeight: 18)
+            .background(Capsule().fill(color))
     }
 
     // MARK: List
@@ -172,6 +183,8 @@ struct MainWindow: View {
             ScrollView { SettingsView().frame(maxWidth: .infinity, alignment: .leading) }
         case .log:
             LogView()
+        case .headsUp:
+            HeadsUpView()
         case .create:
             TunnelBuilderView(editing: store.builderTarget)
                 .id(store.builderSession)
@@ -212,10 +225,19 @@ struct TunnelCard: View {
                     Text(profile.name).font(.system(size: 13, weight: .semibold))
                     if profile.favorite { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow) }
                 }
-                Text(profile.endpoint ?? "no endpoint")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(profile.endpoint ?? "no endpoint")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if let q = store.qualitySummary(profile.name), q.grade != .unknown {
+                        Text(q.grade.rawValue)
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().fill(q.grade.color.opacity(0.18)))
+                            .foregroundStyle(q.grade.color)
+                    }
+                }
                 Text(busy ? (isActive ? "Disconnecting…" : "Connecting…")
                      : store.failures[profile.name] != nil ? "Couldn't connect"
                      : isActive ? (store.isSilent(profile.name) ? "No answer from server"
@@ -276,39 +298,3 @@ struct BulkActions: View {
     }
 }
 
-// MARK: - Log
-
-struct LogView: View {
-    @EnvironmentObject var store: TunnelStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Log").font(.title3.weight(.semibold))
-                Spacer()
-                Text("Helper log: log stream --predicate 'subsystem == \"io.github.boatngin.wirelight\"'")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-            .padding(16)
-            Divider()
-            if store.log.isEmpty {
-                Text("No events yet").foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(store.log.reversed()) { e in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(e.date, format: .dateTime.hour().minute().second())
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                        Text(e.message)
-                            .font(.system(size: 12))
-                            .foregroundStyle(e.isError ? Color.red : .primary)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-        }
-    }
-}

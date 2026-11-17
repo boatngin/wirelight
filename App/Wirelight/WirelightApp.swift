@@ -35,9 +35,13 @@ struct WirelightApp: App {
 private struct MenuBarLabel: View {
     @EnvironmentObject var store: TunnelStore
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(MenuBarIcon.coloredKey) private var colored = false
+    @AppStorage(NotchPill.enabledKey) private var notch = false
 
     var body: some View {
-        Image(nsImage: MenuBarIcon.image(store.iconState))
+        Image(nsImage: MenuBarIcon.image(store.iconState, colored: colored))
+            .onAppear { NotchPill.shared.update(enabled: notch, store: store) }
+            .onChange(of: notch) { on in NotchPill.shared.update(enabled: on, store: store) }
             .task {
                 guard TunnelStore.isDemo else { return }
                 openWindow(id: "main")

@@ -70,15 +70,27 @@ enum MenuBarIcon {
     }
 
     private static var cache: [String: NSImage] = [:]
+    static let coloredKey = "menuBarIconColored"
 
-    static func image(_ state: IconState) -> NSImage {
-        let key = "\(state)"
+    /// Monochrome is a template image macOS tints; colored paints the state color
+    /// (green connected, orange stale, blue connecting) and stays a template when off.
+    static func image(_ state: IconState, colored: Bool = false) -> NSImage {
+        let tint: NSColor? = {
+            guard colored else { return nil }
+            switch state {
+            case .disconnected: return nil
+            case .connecting: return .systemBlue
+            case .connected: return .systemGreen
+            case .stale: return .systemOrange
+            }
+        }()
+        let key = "\(state)|\(tint?.description ?? "t")"
         if let img = cache[key] { return img }
         let img = NSImage(size: NSSize(width: side, height: side), flipped: true) { _ in
-            draw(state, color: .black)
+            draw(state, color: tint ?? .black)
             return true
         }
-        img.isTemplate = true
+        img.isTemplate = tint == nil
         img.accessibilityDescription = "Wirelight"
         cache[key] = img
         return img

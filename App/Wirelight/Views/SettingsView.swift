@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var recordingHotKey = false
     @State private var renaming = false
     @State private var newName = ""
+    @AppStorage(MenuBarIcon.coloredKey) private var coloredIcon = false
+    @AppStorage(NotchPill.enabledKey) private var notchPill = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -24,6 +26,11 @@ struct SettingsView: View {
                 set: { store.connectOnLaunch = $0 }))
 
             hotKeyRow
+
+            Divider()
+            appearance
+            Divider()
+            monitoring
 
             Divider()
 
@@ -74,6 +81,65 @@ struct SettingsView: View {
         .onAppear { if selected == nil { selected = store.mainSelection ?? store.currentProfile?.name } }
         .onChange(of: selected) { _ in message = nil }
         .onDisappear { recordingHotKey = false }
+    }
+
+    private var appearance: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Appearance").font(.headline)
+            Picker("Menu bar icon", selection: $coloredIcon) {
+                Text("Monochrome").tag(false)
+                Text("Colored by status").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 360)
+            Toggle("Show a status pill beside the notch", isOn: $notchPill)
+            Text("Connected tunnels and live speed next to the camera housing; hover for details. Only on screens with a notch.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var monitoring: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Monitoring").font(.headline)
+            Toggle("Measure link quality (latency and packet loss)", isOn: $store.quality.enabled)
+            if store.quality.enabled {
+                Group {
+                    Picker("Ping", selection: $store.quality.target) {
+                        Text("Each tunnel's server (outside the tunnel)").tag(QualitySettings.Target.server)
+                        Text("A host through the tunnel").tag(QualitySettings.Target.custom)
+                    }
+                    if store.quality.target == .custom {
+                        TextField("Host, e.g. 10.0.0.1", text: $store.quality.customHost)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+                    }
+                    HStack {
+                        Picker("Every", selection: $store.quality.interval) {
+                            ForEach([5, 10, 30, 60], id: \.self) { Text("\($0) s").tag($0) }
+                        }.fixedSize()
+                        Picker("Keep", selection: $store.quality.historyHours) {
+                            ForEach([1, 6, 24], id: \.self) { Text("\($0) h").tag($0) }
+                        }.fixedSize()
+                    }
+                    HStack(spacing: 16) {
+                        Stepper("Fair from \(Int(store.quality.fairMs)) ms", value: $store.quality.fairMs, in: 10...1000, step: 10)
+                        Stepper("Poor from \(Int(store.quality.poorMs)) ms", value: $store.quality.poorMs, in: 20...2000, step: 10)
+                    }
+                    HStack(spacing: 16) {
+                        Stepper("Fair from \(store.quality.fairLoss, specifier: "%.0f")% loss", value: $store.quality.fairLoss, in: 0...50)
+                        Stepper("Poor from \(store.quality.poorLoss, specifier: "%.0f")% loss", value: $store.quality.poorLoss, in: 1...100)
+                    }
+                    Text("About \(Format.bytes(UInt64(store.quality.bytesPerHourPerTunnel))) per hour per connected tunnel, \(store.quality.samplesKept) probes kept in memory.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.leading, 18)
+            }
+            HStack {
+                Text("Speed test file")
+                TextField("https://… a large file you own",
+                          text: Binding(get: { store.speedTestURL }, set: { store.speedTestURL = $0 }))
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
     }
 
     private var hotKeyRow: some View {
