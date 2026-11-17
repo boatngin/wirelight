@@ -3,7 +3,7 @@ import SwiftUI
 import WGCore
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case all, active, favorites, importConfig, settings, log
+    case all, active, favorites, create, importConfig, settings, log
     var id: String { rawValue }
 
     var title: String {
@@ -11,6 +11,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "All Tunnels"
         case .active: return "Active"
         case .favorites: return "Favorites"
+        case .create: return "New Tunnel"
         case .importConfig: return "Import"
         case .settings: return "Settings"
         case .log: return "Log"
@@ -22,6 +23,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return "list.bullet"
         case .active: return "bolt.fill"
         case .favorites: return "star.fill"
+        case .create: return "square.and.pencil"
         case .importConfig: return "square.and.arrow.down"
         case .settings: return "gearshape"
         case .log: return "doc.text"
@@ -33,6 +35,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .all: return .accentColor
         case .active: return .green
         case .favorites: return .yellow
+        case .create: return .teal
         case .importConfig: return .purple
         case .settings: return .secondary
         case .log: return .blue
@@ -57,8 +60,11 @@ struct MainWindow: View {
         }
         .toolbar {
             ToolbarItem {
-                Button { store.mainSection = .importConfig } label: { Image(systemName: "plus") }
-                    .help("Import config")
+                Menu {
+                    Button("New Tunnel…") { store.openBuilder() }
+                    Button("Import Config…") { store.mainSection = .importConfig }
+                } label: { Image(systemName: "plus") }
+                    .help("New or import")
             }
         }
         .frame(minWidth: 820, minHeight: 520)
@@ -77,7 +83,10 @@ struct MainWindow: View {
     // MARK: Sidebar
 
     private var sidebar: some View {
-        List(selection: $store.mainSection) {
+        List(selection: Binding(get: { store.mainSection }, set: { item in
+            // The sidebar entry always means "new"; editing is opened from a tunnel.
+            if item == .create { store.openBuilder() } else { store.mainSection = item }
+        })) {
             ForEach(SidebarItem.allCases) { item in
                 HStack {
                     Label {
@@ -132,7 +141,10 @@ struct MainWindow: View {
                     Text(store.profiles.isEmpty ? "Import a .conf file to add your first tunnel" : "Nothing here")
                         .foregroundStyle(.secondary)
                     if store.profiles.isEmpty {
-                        Button("Import config") { store.mainSection = .importConfig }
+                        HStack {
+                            Button("New tunnel") { store.openBuilder() }
+                            Button("Import config") { store.mainSection = .importConfig }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -160,6 +172,9 @@ struct MainWindow: View {
             ScrollView { SettingsView().frame(maxWidth: .infinity, alignment: .leading) }
         case .log:
             LogView()
+        case .create:
+            TunnelBuilderView(editing: store.builderTarget)
+                .id(store.builderSession)
         case .importConfig:
             ImportView()
                 .frame(maxWidth: 520)
@@ -224,6 +239,7 @@ struct TunnelCard: View {
         .onHover { hovering = $0 }
         .contextMenu {
             Button(profile.favorite ? "Unfavorite" : "Favorite") { store.toggleFavorite(profile.name) }
+            Button("Edit…") { store.openBuilder(edit: profile.name) }
             Button("Duplicate") { store.duplicate(profile.name) }
             Button(isActive ? "Disconnect" : "Connect") {
                 Task { isActive ? await store.disconnect(profile.name) : await store.connect(profile.name) }

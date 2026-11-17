@@ -12,6 +12,10 @@ struct ImportView: View {
     @State private var summary: String?
     @State private var error: String?
     @State private var dropTargeted = false
+    /// Checks for the loaded text, valid or not.
+    @State private var issues: [ConfigIssue] = []
+    /// Text that failed to parse, kept so it can be fixed in the builder.
+    @State private var brokenText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -30,6 +34,14 @@ struct ImportView: View {
             }
             if let error {
                 Text(error).font(.system(size: 12)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            }
+            if text != nil || brokenText != nil {
+                ChecksList(issues: issues)
+            }
+            if let brokenText {
+                Button { store.openBuilder(seed: brokenText, seedName: name); reset() } label: {
+                    Label("Fix in editor", systemImage: "square.and.pencil")
+                }
             }
             HStack {
                 Spacer()
@@ -109,15 +121,19 @@ struct ImportView: View {
     private func fail(_ message: String) {
         text = nil
         summary = nil
+        brokenText = nil
+        issues = []
         error = message
     }
 
     private func load(text t: String, suggestedName: String) {
         error = nil
+        issues = ConfigLint.check(t)
+        if name.isEmpty { name = Self.suggestName(suggestedName) }
         do {
             let cfg = try WGConfig(parsing: t)
             text = t
-            if name.isEmpty { name = Self.suggestName(suggestedName) }
+            brokenText = nil
             summary = """
             Address:  \(cfg.interface.addresses.joined(separator: ", "))
             Peers:    \(cfg.peers.count)
@@ -125,7 +141,10 @@ struct ImportView: View {
             DNS:      \((cfg.interface.dns + cfg.interface.dnsSearch).joined(separator: ", ").isEmpty ? "-" : (cfg.interface.dns + cfg.interface.dnsSearch).joined(separator: ", "))
             """
         } catch {
-            fail("Invalid config: \(error)")
+            text = nil
+            summary = nil
+            brokenText = t
+            self.error = "This config has errors. See the checks below, or fix it in the editor."
         }
     }
 
@@ -143,10 +162,10 @@ struct ImportView: View {
     }
 
     private func reset() {
-        text = nil; name = ""; summary = nil; error = nil
+        text = nil; name = ""; summary = nil; error = nil; brokenText = nil; issues = []
     }
 
     static func suggestName(_ s: String) -> String {
-        String(s.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }.prefix(15))
+        String(s.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }.prefix(32))
     }
 }

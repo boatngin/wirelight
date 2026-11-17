@@ -5,7 +5,7 @@ import Darwin
 
 /// Pure validation helpers shared by the app, helper and CLI.
 public enum Validation {
-    private static let tunnelNameRegex = try! NSRegularExpression(pattern: "^[a-zA-Z0-9_-]{1,15}$")
+    private static let tunnelNameRegex = try! NSRegularExpression(pattern: "^[a-zA-Z0-9_-]{1,32}$")
     private static let hostnameRegex = try! NSRegularExpression(
         pattern: "^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\\.?$")
 

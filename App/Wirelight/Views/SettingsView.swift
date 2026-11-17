@@ -8,7 +8,6 @@ struct SettingsView: View {
 
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var selected: String?
-    @State private var editorText = ""
     @State private var message: String?
     @State private var messageIsError = false
     @State private var confirmDelete = false
@@ -39,11 +38,7 @@ struct SettingsView: View {
             }
 
             if let name = selected {
-                Text("Config (stored in Keychain)").font(.caption).foregroundStyle(.secondary)
-                TextEditor(text: $editorText)
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(minHeight: 260)
-                    .border(Color.secondary.opacity(0.3))
+                Text("The config is stored in your Keychain.").font(.caption).foregroundStyle(.secondary)
                 if let message {
                     Text(message).font(.system(size: 12)).foregroundStyle(messageIsError ? .red : .green)
                 }
@@ -51,8 +46,7 @@ struct SettingsView: View {
                     Button("Delete Tunnel…", role: .destructive) { confirmDelete = true }
                     Button("Rename…") { renaming = true; newName = name }
                     Spacer()
-                    Button("Revert") { loadEditor(name) }
-                    Button("Validate & Save") { save(name) }.keyboardShortcut("s")
+                    Button("Edit Config…") { store.openBuilder(edit: name) }
                 }
                 .confirmationDialog("Delete tunnel '\(name)'?", isPresented: $confirmDelete) {
                     Button("Delete", role: .destructive) {
@@ -71,17 +65,14 @@ struct SettingsView: View {
                         Button("Rename") { rename(name) }.keyboardShortcut(.return)
                     }
                 }
-                if store.isActive(name) {
-                    Text("Changes apply the next time you connect.").font(.caption).foregroundStyle(.secondary)
-                }
             } else {
                 Text("No tunnels. Use Import config… from the menu.").foregroundStyle(.secondary)
             }
         }
         .padding(20)
         .frame(width: 520)
-        .onAppear { if selected == nil { selected = store.mainSelection ?? store.currentProfile?.name } ; if let s = selected { loadEditor(s) } }
-        .onChange(of: selected) { name in if let name { loadEditor(name) } else { editorText = "" } }
+        .onAppear { if selected == nil { selected = store.mainSelection ?? store.currentProfile?.name } }
+        .onChange(of: selected) { _ in message = nil }
         .onDisappear { recordingHotKey = false }
     }
 
@@ -121,21 +112,6 @@ struct SettingsView: View {
         store.toggleHotKey = HotKeyCombo(keyCode: UInt32(event.keyCode), modifiers: mods)
     }
 
-    private func loadEditor(_ name: String) {
-        editorText = store.configText(name) ?? ""
-        message = nil
-    }
-
-    private func save(_ name: String) {
-        do {
-            try store.updateConfig(name: name, text: editorText)
-            message = "Saved"
-            messageIsError = false
-        } catch {
-            message = String(describing: error)
-            messageIsError = true
-        }
-    }
 
     private func rename(_ name: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespaces)

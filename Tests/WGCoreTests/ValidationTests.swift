@@ -131,14 +131,14 @@ final class ValidationTests: XCTestCase {
     }
 
     func testValidTunnelNames() {
-        for value in ["a", "home", "oci_tokyo-1", String(repeating: "a", count: 15)] {
+        for value in ["a", "home", "oci_tokyo-1", String(repeating: "a", count: 32), "this-name-is-fine-now"] {
             XCTAssertTrue(Validation.isValidTunnelName(value), value)
         }
     }
 
     func testInvalidTunnelNames() {
         for value in [
-            "", String(repeating: "a", count: 16), "this-name-is-too-long", "café", "隧道", "a b", "../etc", "a/b",
+            "", String(repeating: "a", count: 33), "café", "隧道", "a b", "../etc", "a/b",
             "x;rm", "$(id)", "a|b", "home\n", "home\r\n", "home\0ignored",
         ] {
             XCTAssertFalse(Validation.isValidTunnelName(value), value.debugDescription)

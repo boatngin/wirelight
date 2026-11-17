@@ -274,7 +274,7 @@ struct TunnelDetailView: View {
                 }
                 PillButton(icon: profile.favorite ? "star.fill" : "star",
                            title: profile.favorite ? "Unfavorite" : "Favorite") { store.toggleFavorite(profile.name) }
-                PillButton(icon: "pencil", title: "Edit") { store.mainSection = .settings }
+                PillButton(icon: "pencil", title: "Edit") { store.openBuilder(edit: profile.name) }
                 PillButton(icon: "square.and.arrow.up", title: "Export") { exportConfig() }
                 PillButton(icon: "plus.square.on.square", title: "Duplicate") { store.duplicate(profile.name) }
                 Spacer()
