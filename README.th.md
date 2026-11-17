@@ -17,6 +17,9 @@
 - **Split DNS**: ใช้ DNS ของ tunnel เฉพาะ domain ที่กำหนด เช่น `lan`
 - **Split tunnel exclusions**: CIDR ที่กำหนดไม่ต้องผ่าน tunnel แม้เปิด Route all traffic อยู่
 - **แจ้งเตือนเมื่อมีปัญหา**: บอก "No answer from server" ภายใน 25 วินาที, เชื่อมต่อไม่สำเร็จมีปุ่ม Retry, เตือน IPv6 รั่วพร้อมปุ่ม Block IPv6 และต่อใหม่เองเมื่อ tunnel หลุด
+- **วัดคุณภาพลิงก์** (เปิดเองได้): latency, packet loss และเกรด Good / Fair / Poor พร้อมกราฟ และ speed test กับไฟล์ HTTPS ของคุณเอง
+- **หน้า Heads-up**: รวมปัญหาทั้งหมดพร้อมวิธีแก้ และ Log ค้นหา กรอง คัดลอก ล้างได้
+- **ปรับหน้าตา**: ไอคอน menu bar แบบขาวดำหรือมีสีตามสถานะ และ pill แสดงสถานะข้างรอยบากจอ
 - **กฎตามเครือข่าย**: แต่ละ tunnel ต่อหรือตัดเองตามชื่อ Wi-Fi, Wi-Fi ใดก็ได้, Ethernet ตาม subnet หรือ Ethernet ใดก็ได้ และกำหนดว่า "ที่อื่น ๆ" ให้ทำอะไร
 - **Shortcuts และ Siri**: มี action Connect/Disconnect Tunnel, Disconnect All, Connect Favorites และ Get Connected Tunnels
 - **Route all traffic**: ส่งทุกอย่างผ่าน tunnel ด้วยคลิกเดียว

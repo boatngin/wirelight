@@ -40,6 +40,9 @@
 - **Split DNS**: send only some domains (like `lan` or `corp.example`) to the tunnel's DNS.
 - **Split tunnel exclusions**: keep chosen CIDRs off the tunnel, even when routing all traffic.
 - **Route all traffic**: full-tunnel mode in one click.
+- **Link quality** (optional, off by default): latency, packet loss and a Good / Fair / Poor grade per tunnel with a chart, plus a speed test against an HTTPS file you choose.
+- **Heads-up page**: every live problem with its fix, and config advice for each tunnel. The log can be searched, filtered, copied and cleared.
+- **Your look**: monochrome or status-colored menu bar icon, and an optional status pill beside the notch.
 - **Network rules**: per tunnel, connect or disconnect on Wi-Fi by name, any Wi-Fi, Ethernet by subnet or any Ethernet, with an "everywhere else" action. First match wins, and the page shows which rule applies right now.
 - **Shortcuts and Siri**: Connect Tunnel, Disconnect Tunnel, Disconnect All, Connect Favorites and Get Connected Tunnels actions (also usable from Raycast through Shortcuts).
 - **Several tunnels at once**: run home, office and lab side by side, each with its own switch and live speed.

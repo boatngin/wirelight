@@ -42,6 +42,12 @@ extension TunnelStore {
                                     detail: "No handshake for over 3 minutes. Wirelight re-resolves the server's address every 2 minutes in case it changed.",
                                     fix: .reconnect))
         }
+        if let q = qualitySummary(name), q.grade == .poor {
+            let what = q.median.map { String(format: "typical %.0f ms", $0) } ?? "no replies"
+            out.append(HealthNotice(tunnel: name, icon: "waveform.path.ecg", color: .orange, title: "Link quality is poor",
+                                    detail: "Measured \(what), \(String(format: "%.1f", q.loss))% loss to \(probeHost(name) ?? "the target"). This is a measurement, not a cause: the server, Wi-Fi or ISP can all be the reason.",
+                                    fix: nil))
+        }
         if isActive(name), leaksIPv6(name) {
             out.append(HealthNotice(tunnel: name, icon: "drop.triangle.fill", color: .orange, title: "IPv6 bypasses the tunnel",
                                     detail: "This tunnel takes all IPv4 but not IPv6, and your network has IPv6. Block IPv6 while it's connected, or add ::/0 if the server supports IPv6.",
@@ -91,9 +97,11 @@ struct HealthStrip: View {
                     .fixedSize(horizontal: false, vertical: !compact)
             }
             Spacer(minLength: 4)
-            Button(n.fixTitle) { Task { await store.perform(n) } }
-                .controlSize(.small)
-                .disabled(store.isBusy(n.tunnel))
+            if n.fix != nil {
+                Button(n.fixTitle) { Task { await store.perform(n) } }
+                    .controlSize(.small)
+                    .disabled(store.isBusy(n.tunnel))
+            }
         }
         .padding(.horizontal, compact ? 8 : 12)
         .padding(.vertical, compact ? 7 : 10)

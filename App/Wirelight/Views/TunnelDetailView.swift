@@ -12,6 +12,7 @@ struct TunnelDetailView: View {
 
     @State private var testResult: String?
     @State private var testing = false
+    @State private var speedTesting = false
     @State private var showAdvanced = false
     @State private var copiedField: String?
 
@@ -37,6 +38,7 @@ struct TunnelDetailView: View {
                     stats
                     traffic
                 }
+                QualityCard(name: profile.name)
                 connectionCard
                 optionsCard
                 actions
@@ -289,6 +291,13 @@ struct TunnelDetailView: View {
                         Task { testResult = await store.testConnection(profile.name); testing = false }
                     }
                 }
+                if isActive && !store.speedTestURL.isEmpty {
+                    PillButton(icon: "speedometer", title: speedTesting ? "Measuring…" : "Speed test", tint: .accentColor) {
+                        guard !speedTesting else { return }
+                        speedTesting = true
+                        Task { testResult = await store.speedTest(); speedTesting = false }
+                    }
+                }
                 PillButton(icon: profile.favorite ? "star.fill" : "star",
                            title: profile.favorite ? "Unfavorite" : "Favorite") { store.toggleFavorite(profile.name) }
                 PillButton(icon: "pencil", title: "Edit") { store.openBuilder(edit: profile.name) }
@@ -299,7 +308,7 @@ struct TunnelDetailView: View {
             if let testResult {
                 Text(testResult)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(testResult.contains("avg") ? Color.green : .orange)
+                    .foregroundStyle(testResult.contains("avg") || testResult.hasPrefix("Download") ? Color.green : .orange)
                     .textSelection(.enabled)
             }
         }

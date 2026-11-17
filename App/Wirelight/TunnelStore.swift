@@ -223,6 +223,7 @@ final class TunnelStore: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         startPolling()
         watchSystemEvents()
+        restartQualityMonitor()
         // Reading the Wi-Fi SSID via CoreWLAN needs Location permission on recent macOS.
         locationManager.requestWhenInUseAuthorization()
         Task {
@@ -722,6 +723,79 @@ final class TunnelStore: ObservableObject {
         }
     }
 
+    // MARK: Link quality
+
+    @Published var quality = QualitySettings.load() {
+        didSet {
+            guard quality != oldValue else { return }
+            if !Self.isDemo { quality.save() }
+            restartQualityMonitor()
+        }
+    }
+    @Published private(set) var qualitySamples: [String: [QualitySample]] = [:]
+    private var qualityTask: Task<Void, Never>?
+
+    func qualitySummary(_ name: String) -> QualitySummary? {
+        guard quality.enabled, isActive(name) else { return nil }
+        return QualitySummary(qualitySamples[name] ?? [], settings: quality)
+    }
+
+    /// The host probed for a tunnel: its server (reached outside the tunnel) or the user's host.
+    func probeHost(_ name: String) -> String? {
+        if quality.target == .custom {
+            let h = quality.customHost.trimmingCharacters(in: .whitespaces)
+            return Validation.isValidIP(h) || Validation.isValidHostname(h) ? h : nil
+        }
+        let ep = statuses[name]?.peers.first?.endpoint ?? profile(name)?.endpoint ?? ""
+        if ep.hasPrefix("["), let close = ep.firstIndex(of: "]") { return String(ep[ep.index(after: ep.startIndex)..<close]) }
+        return ep.split(separator: ":").first.map(String.init)
+    }
+
+    func restartQualityMonitor() {
+        qualityTask?.cancel()
+        guard quality.enabled, !Self.isDemo else { qualitySamples = [:]; return }
+        qualityTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let targets = self.activeNames.compactMap { n in self.probeHost(n).map { (n, $0) } }
+                await withTaskGroup(of: (String, QualitySample).self) { group in
+                    for (name, host) in targets { group.addTask { (name, await Pinger.probe(host)) } }
+                    for await (name, sample) in group {
+                        var list = self.qualitySamples[name] ?? []
+                        list.append(sample)
+                        if list.count > self.quality.samplesKept { list.removeFirst(list.count - self.quality.samplesKept) }
+                        self.qualitySamples[name] = list
+                    }
+                }
+                for gone in Set(self.qualitySamples.keys).subtracting(self.activeNames) { self.qualitySamples[gone] = nil }
+                try? await Task.sleep(nanoseconds: UInt64(self.quality.interval) * 1_000_000_000)
+            }
+        }
+    }
+
+    // MARK: Speed test
+
+    static let speedTestURLKey = "speedTestURL"
+    /// An HTTPS file of the user's own; nothing is downloaded unless they set one.
+    var speedTestURL: String {
+        get { UserDefaults.standard.string(forKey: Self.speedTestURLKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Self.speedTestURLKey); objectWillChange.send() }
+    }
+
+    /// Downloads up to 10 s or 100 MB from `speedTestURL` and reports the rate.
+    func speedTest() async -> String {
+        guard let url = URL(string: speedTestURL), url.scheme == "https" else {
+            return "Set an HTTPS file URL in Settings › Monitoring first"
+        }
+        let probe = await SpeedProbe.run(url, limitBytes: 100_000_000, limitSeconds: 10)
+        if let err = probe.error { return "Speed test failed: \(err)" }
+        let bytes = probe.bytes
+        let rate = Double(bytes) / max(probe.seconds, 0.001)
+        let result = "Download \(Format.rate(rate)) (\(Format.bytes(UInt64(bytes))) in \(String(format: "%.1f", probe.seconds)) s)"
+        addLog("Speed test: \(result)")
+        return result
+    }
+
     // MARK: Test connection
 
     /// Pings a host that should only be reachable through the tunnel.
@@ -772,6 +846,8 @@ final class TunnelStore: ObservableObject {
 
     /// Read-only so it is safe to call from view bodies; filled in `loadProfiles`.
     func config(_ name: String) -> WGConfig? { configs[name] }
+
+    func clearLog() { log = [] }
 
     func addLog(_ message: String, isError: Bool = false) {
         log.append(LogEntry(date: Date(), message: message, isError: isError))
@@ -876,6 +952,20 @@ final class TunnelStore: ObservableObject {
         traffic["office"] = demoSamples.map { TrafficSample(date: $0.date, rx: $0.rx * 0.2, tx: $0.tx * 0.3) }
         since["office"] = now.addingTimeInterval(-1800)
         failures["tokyo-vps"] = "wireguard-go failed: control socket for utun9 did not appear"
+        quality.enabled = true
+        qualitySamples["home"] = (0..<60).map { i -> QualitySample in
+            let t = Double(i)
+            let spike: Double = i % 17 == 0 ? 40 : 0
+            let rtt: Double = 24 + 8 * sin(t / 4) + spike
+            let loss: Double = i % 23 == 0 ? 33 : 0
+            return QualitySample(date: now.addingTimeInterval(-600 + t * 10), rtt: rtt, loss: loss)
+        }
+        qualitySamples["office"] = (0..<60).map { i -> QualitySample in
+            let t = Double(i)
+            let rtt: Double = 170 + Double(i % 7) * 9
+            let loss: Double = i % 5 == 0 ? 33 : 0
+            return QualitySample(date: now.addingTimeInterval(-600 + t * 10), rtt: rtt, loss: loss)
+        }
         addLog("Imported home")
         addLog("Connected home")
         addLog("Test home: 10.8.0.1: avg 18.4 ms · 0.0% packet loss")
