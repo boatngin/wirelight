@@ -46,6 +46,7 @@
 - **AmneziaWG**: configs with AmneziaWG obfuscation keys run on the bundled AmneziaWG engine; pick Automatic, WireGuard or AmneziaWG per tunnel.
 - **Shared tunnels**: an administrator can share a tunnel with every user on the Mac. The helper keeps it root-only; others connect or disconnect as allowed and never see its keys.
 - **Multi-hop**: chain two tunnels so one carries the other's encrypted traffic; the exit server sees the hop's address, not yours. Chains switch on and off as one.
+- **Toolbox**: turn Tailscale or NetBird on or off and pick a Tailscale exit node, keep SSH port forwards (local, remote, SOCKS5) up with automatic reconnects, and wake machines with Wake-on-LAN.
 - **Places**: for a Wi-Fi name or Ethernet subnet, switch DNS (Cloudflare, Quad9, Google or your own, with a latency test and automatic fallback), set a manual or PAC proxy, turn tunnels on or off and run a Shortcut. Your own settings come back when you leave, quit, or after a crash. Flush the DNS cache with one button.
 - **Network Doctor**: finds other VPNs, routes that steal a tunnel's traffic, AllowedIPs that overlap your LAN or each other, and DNS another app is overriding.
 - **Network rules**: per tunnel, connect or disconnect on Wi-Fi by name, any Wi-Fi, Ethernet by subnet or any Ethernet, with an "everywhere else" action. First match wins, and the page shows which rule applies right now.

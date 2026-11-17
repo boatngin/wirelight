@@ -23,6 +23,7 @@
 - **AmneziaWG**: config ที่มีค่า obfuscation ของ AmneziaWG จะรันบน engine AmneziaWG ที่แถมมา เลือก Automatic, WireGuard หรือ AmneziaWG ได้ทีละ tunnel
 - **แชร์ tunnel**: admin แชร์ tunnel ให้ทุก user บนเครื่องได้ helper เก็บไว้ให้ root อ่านได้คนเดียว คนอื่นเปิดปิดได้ตามที่อนุญาตโดยไม่เห็น key
 - **Multi-hop**: ต่อ tunnel สองตัวเป็นทอด ตัวแรกพา traffic ที่เข้ารหัสของตัวที่สอง เซิร์ฟเวอร์ปลายทางเห็นแค่ IP ของตัวแรก
+- **Toolbox**: เปิดปิด Tailscale หรือ NetBird และเลือก exit node ของ Tailscale, SSH port forward (local, remote, SOCKS5) ที่ต่อใหม่เองเมื่อหลุด และปลุกเครื่องด้วย Wake-on-LAN
 - **Places**: ตั้งค่าตามชื่อ Wi-Fi หรือ subnet ของ Ethernet เปลี่ยน DNS (Cloudflare, Quad9, Google หรือกำหนดเอง พร้อมทดสอบ latency และคืนค่าเองถ้าใช้ไม่ได้), ตั้ง proxy แบบ manual หรือ PAC, เปิดปิด tunnel และรัน Shortcut ค่าเดิมกลับมาเมื่อออกจากเครือข่าย ปิดแอป หรือหลังแครช
 - **Network Doctor**: หา VPN ตัวอื่น, route ที่แย่ง traffic ของ tunnel, AllowedIPs ที่ทับ LAN หรือทับกันเอง และ DNS ที่แอปอื่นแก้ทับ
 - **กฎตามเครือข่าย**: แต่ละ tunnel ต่อหรือตัดเองตามชื่อ Wi-Fi, Wi-Fi ใดก็ได้, Ethernet ตาม subnet หรือ Ethernet ใดก็ได้ และกำหนดว่า "ที่อื่น ๆ" ให้ทำอะไร

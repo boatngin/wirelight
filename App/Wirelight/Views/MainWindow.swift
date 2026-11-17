@@ -3,7 +3,7 @@ import SwiftUI
 import WGCore
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case all, active, favorites, shared, chains, headsUp, places, doctor, create, importConfig, settings, log
+    case all, active, favorites, shared, chains, headsUp, places, doctor, toolbox, create, importConfig, settings, log
     var id: String { rawValue }
 
     var title: String {
@@ -16,6 +16,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .headsUp: return "Heads-up"
         case .places: return "Places"
         case .doctor: return "Network Doctor"
+        case .toolbox: return "Toolbox"
         case .create: return "New Tunnel"
         case .importConfig: return "Import"
         case .settings: return "Settings"
@@ -33,6 +34,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .headsUp: return "exclamationmark.bubble"
         case .places: return "mappin.and.ellipse"
         case .doctor: return "stethoscope"
+        case .toolbox: return "wrench.and.screwdriver"
         case .create: return "square.and.pencil"
         case .importConfig: return "square.and.arrow.down"
         case .settings: return "gearshape"
@@ -50,6 +52,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .headsUp: return .orange
         case .places: return .pink
         case .doctor: return .mint
+        case .toolbox: return .brown
         case .create: return .teal
         case .importConfig: return .purple
         case .settings: return .secondary
@@ -205,6 +208,8 @@ struct MainWindow: View {
             PlacesView()
         case .doctor:
             DoctorView()
+        case .toolbox:
+            ToolboxView()
         case .create:
             TunnelBuilderView(editing: store.builderTarget)
                 .id(store.builderSession)
