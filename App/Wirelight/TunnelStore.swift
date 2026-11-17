@@ -30,6 +30,10 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var engine: Engine?
 
     enum Engine: String, Codable, CaseIterable { case wireguard, amneziawg }
+    /// Shell command run as the user after connecting; the IPs/CIDRs it prints become routes.
+    var routeCommand: String = ""
+    /// Last routes the command produced, used when it fails next time.
+    var cachedRoutes: [String] = []
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -62,11 +66,13 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
         blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
         engine = try c.decodeIfPresent(Engine.self, forKey: .engine)
+        routeCommand = try c.decodeIfPresent(String.self, forKey: .routeCommand) ?? ""
+        cachedRoutes = try c.decodeIfPresent([String].self, forKey: .cachedRoutes) ?? []
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, endpoint, addresses, routeAll, favorite, createdAt, splitDNSDomains, excludedCIDRs
-        case onDemand, rules, otherwise, trustedSSIDs, killSwitch, blockIPv6, engine
+        case onDemand, rules, otherwise, trustedSSIDs, killSwitch, blockIPv6, engine, routeCommand, cachedRoutes
     }
 
     func encode(to encoder: Encoder) throws {
@@ -85,6 +91,8 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         try c.encode(killSwitch, forKey: .killSwitch)
         try c.encode(blockIPv6, forKey: .blockIPv6)
         try c.encodeIfPresent(engine, forKey: .engine)
+        try c.encode(routeCommand, forKey: .routeCommand)
+        try c.encode(cachedRoutes, forKey: .cachedRoutes)
     }
 
     var upOptions: UpOptions {
@@ -162,6 +170,9 @@ final class TunnelStore: ObservableObject {
             addLog("\(name): \(error)", isError: true)
         }
     }
+
+    /// Last route command result per tunnel.
+    @Published var routeRuns: [String: RouteRun] = [:]
 
     /// Multi-hop pairs; see `ChainsView`.
     @Published var chains: [HopChain] = []
@@ -499,6 +510,7 @@ final class TunnelStore: ObservableObject {
             notifiedSilent.remove(name)
             notify("Connected", name)
             addLog("Connected \(name)")
+            if profile(name)?.routeCommand.isEmpty == false { Task { await learnRoutes(name) } }
         } catch {
             failures[name] = String(describing: error)
             addLog("\(name): \(error)", isError: true)
@@ -981,6 +993,9 @@ final class TunnelStore: ObservableObject {
                                           createdAt: Date().addingTimeInterval(-86400 * Double(30 - i * 7))))
         }
         profiles[0].splitDNSDomains = ["lan", "home.arpa"]
+        profiles[0].routeCommand = "~/bin/inventory.sh prod"
+        routeRuns["home"] = RouteRun(date: Date().addingTimeInterval(-90), applied: ["10.40.0.0/16", "10.41.2.0/24", "203.0.113.7/32"],
+                                     rejected: ["127.0.0.1 (special range 127.0.0.0/8)"], fromCache: false, error: nil)
         profiles[0].onDemand = true
         profiles[0].rules = [NetworkRule(kind: .wifi, values: ["HomeWiFi"], action: .disconnect),
                              NetworkRule(kind: .ethernet, values: ["10.20.0.0/16"], action: .disconnect)]
@@ -1045,6 +1060,13 @@ final class TunnelStore: ObservableObject {
         addLog("Imported home")
         addLog("Connected home")
         addLog("Test home: 10.8.0.1: avg 18.4 ms · 0.0% packet loss")
+    }
+
+    /// Changes saved metadata without reconnecting.
+    func editProfile(_ name: String, _ change: (inout TunnelProfile) -> Void) {
+        guard let i = profiles.firstIndex(where: { $0.name == name }) else { return }
+        change(&profiles[i])
+        saveProfiles()
     }
 
     private func saveProfiles() {

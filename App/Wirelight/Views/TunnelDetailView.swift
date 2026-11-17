@@ -295,6 +295,10 @@ struct TunnelDetailView: View {
                             Task { await store.setExclusions(list, for: profile.name) }
                         }
                     }
+                    advancedBlock(title: "Learned routes",
+                                  hint: "A command run as you after connecting. Every IP or CIDR it prints (one per line, # for comments) is routed through this tunnel. Ranges wider than /8 (IPv4) or /32 (IPv6) and special ranges are refused; if it fails, the last good list is used.") {
+                        LearnedRoutesBlock(profile: profile)
+                    }
                     Text("Changes reconnect the tunnel if it's active.")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                 }

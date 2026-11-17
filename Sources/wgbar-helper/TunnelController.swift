@@ -31,6 +31,8 @@ struct TunnelState: Codable {
     var via: String?
     /// Host CIDRs added to the hop's peer AllowedIPs for this tunnel's endpoints.
     var viaAllowed: [String]?
+    /// Routes learned after connecting (inventory command), added to the peer's AllowedIPs.
+    var dynamicRoutes: [String]?
 }
 
 enum TunnelError: Error, CustomStringConvertible {
@@ -149,6 +151,7 @@ final class TunnelController {
             }
             do { try syncKillSwitch() }
             catch { log("\(name): kill switch anchor failed: \(error)", error: true) }
+            syncLoopGuard()
             log("\(name): up on \(utun) (\(state.routes.count) routes, dns \(state.dnsBackup == nil ? "unchanged" : "set"))")
         } catch {
             log("\(name): up failed, rolling back: \(error)", error: true)
@@ -475,6 +478,7 @@ final class TunnelController {
         releaseHop(state)
         tunnels[state.name] = nil
         try? syncKillSwitch()
+        syncLoopGuard()
         if state.ipv6Published != nil { DynamicStore.remove(Self.ipv6Key(state.utun)) }
         if let backup = state.dnsBackup {
             for (svc, setting) in backup.sorted(by: { $0.key < $1.key }) {
@@ -612,6 +616,7 @@ final class TunnelController {
     /// that are still alive and clean up the rest.
     func recoverOnStart() {
         PFGuard.remove()
+        try? PFGuard.syncLoopGuard([])
         // A Place left behind by a crash: put the user's DNS/proxy back; the app reapplies it.
         if loadPlace() != nil { try? applyPlace(nil) }
         guard let files = try? fm.contentsOfDirectory(atPath: Self.stateDir) else { return }
@@ -635,5 +640,48 @@ final class TunnelController {
             }
         }
         try? syncKillSwitch()
+        syncLoopGuard()
+    }
+
+    // MARK: routing-loop guard
+
+    /// For every full tunnel, drop its own WireGuard UDP if it ever leaves through itself.
+    private func syncLoopGuard() {
+        let guards: [(utun: String, port: Int)] = tunnels.values.filter { $0.full4 == true || $0.full6 == true }.compactMap { s in
+            guard let out = try? Shell.run(Engine.ctl(s.utun), ["show", s.utun, "listen-port"]).stdout,
+                  let port = Int(out.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+            return (s.utun, port)
+        }
+        do { try PFGuard.syncLoopGuard(guards) }
+        catch { log("loop guard: \(error)", error: true) }
+    }
+
+    // MARK: dynamic routes
+
+    /// Replaces a tunnel's learned routes: old ones leave the peer's AllowedIPs and the
+    /// routing table, new ones are added to both.
+    func setDynamicRoutes(_ name: String, _ cidrs: [String]) throws {
+        guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
+        guard var state = tunnels[name] else { throw TunnelError.notUp(name) }
+        guard cidrs.count <= DynamicRoutes.maxRoutes else { throw TunnelError.interfaceStartFailed("too many routes") }
+        for c in cidrs { if let p = DynamicRoutes.problem(c) { throw TunnelError.interfaceStartFailed("route \(c): \(p)") } }
+        let wanted = cidrs.map(DynamicRoutes.normalize)
+        let old = state.dynamicRoutes ?? []
+        guard let (peer, allowed) = hopPeer(state.utun) else { throw TunnelError.interfaceStartFailed("no peer") }
+        // AllowedIPs: drop what we added before, add the new set.
+        let base = allowed.filter { !old.contains($0) }
+        let next = base + wanted.filter { !base.contains($0) }
+        try Shell.run(Engine.ctl(state.utun), ["set", state.utun, "peer", peer, "allowed-ips", next.joined(separator: ",")])
+        for r in state.routes where r.interface == state.utun && old.contains(r.destination) && !wanted.contains(r.destination) {
+            NetworkConfigurator.deleteRoute(r)
+        }
+        state.routes.removeAll { $0.interface == state.utun && old.contains($0.destination) && !wanted.contains($0.destination) }
+        for c in wanted where !old.contains(c) {
+            let fam = NetworkConfigurator.family(of: String(c.split(separator: "/")[0]))
+            try addRoute(RouteEntry(family: fam, destination: c, interface: state.utun), state: &state)
+        }
+        state.dynamicRoutes = wanted
+        save(state)
+        log("\(name): \(wanted.count) learned route(s)")
     }
 }
