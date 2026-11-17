@@ -20,6 +20,8 @@
 - **วัดคุณภาพลิงก์** (เปิดเองได้): latency, packet loss และเกรด Good / Fair / Poor พร้อมกราฟ และ speed test กับไฟล์ HTTPS ของคุณเอง
 - **หน้า Heads-up**: รวมปัญหาทั้งหมดพร้อมวิธีแก้ และ Log ค้นหา กรอง คัดลอก ล้างได้
 - **ปรับหน้าตา**: ไอคอน menu bar แบบขาวดำหรือมีสีตามสถานะ และ pill แสดงสถานะข้างรอยบากจอ
+- **AmneziaWG**: config ที่มีค่า obfuscation ของ AmneziaWG จะรันบน engine AmneziaWG ที่แถมมา เลือก Automatic, WireGuard หรือ AmneziaWG ได้ทีละ tunnel
+- **แชร์ tunnel**: admin แชร์ tunnel ให้ทุก user บนเครื่องได้ helper เก็บไว้ให้ root อ่านได้คนเดียว คนอื่นเปิดปิดได้ตามที่อนุญาตโดยไม่เห็น key
 - **Multi-hop**: ต่อ tunnel สองตัวเป็นทอด ตัวแรกพา traffic ที่เข้ารหัสของตัวที่สอง เซิร์ฟเวอร์ปลายทางเห็นแค่ IP ของตัวแรก
 - **Places**: ตั้งค่าตามชื่อ Wi-Fi หรือ subnet ของ Ethernet เปลี่ยน DNS (Cloudflare, Quad9, Google หรือกำหนดเอง พร้อมทดสอบ latency และคืนค่าเองถ้าใช้ไม่ได้), ตั้ง proxy แบบ manual หรือ PAC, เปิดปิด tunnel และรัน Shortcut ค่าเดิมกลับมาเมื่อออกจากเครือข่าย ปิดแอป หรือหลังแครช
 - **Network Doctor**: หา VPN ตัวอื่น, route ที่แย่ง traffic ของ tunnel, AllowedIPs ที่ทับ LAN หรือทับกันเอง และ DNS ที่แอปอื่นแก้ทับ

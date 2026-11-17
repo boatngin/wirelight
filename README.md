@@ -43,6 +43,8 @@
 - **Link quality** (optional, off by default): latency, packet loss and a Good / Fair / Poor grade per tunnel with a chart, plus a speed test against an HTTPS file you choose.
 - **Heads-up page**: every live problem with its fix, and config advice for each tunnel. The log can be searched, filtered, copied and cleared.
 - **Your look**: monochrome or status-colored menu bar icon, and an optional status pill beside the notch.
+- **AmneziaWG**: configs with AmneziaWG obfuscation keys run on the bundled AmneziaWG engine; pick Automatic, WireGuard or AmneziaWG per tunnel.
+- **Shared tunnels**: an administrator can share a tunnel with every user on the Mac. The helper keeps it root-only; others connect or disconnect as allowed and never see its keys.
 - **Multi-hop**: chain two tunnels so one carries the other's encrypted traffic; the exit server sees the hop's address, not yours. Chains switch on and off as one.
 - **Places**: for a Wi-Fi name or Ethernet subnet, switch DNS (Cloudflare, Quad9, Google or your own, with a latency test and automatic fallback), set a manual or PAC proxy, turn tunnels on or off and run a Shortcut. Your own settings come back when you leave, quit, or after a crash. Flush the DNS cache with one button.
 - **Network Doctor**: finds other VPNs, routes that steal a tunnel's traffic, AllowedIPs that overlap your LAN or each other, and DNS another app is overriding.

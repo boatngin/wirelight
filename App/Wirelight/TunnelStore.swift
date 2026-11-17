@@ -146,6 +146,23 @@ final class TunnelStore: ObservableObject {
     @Published var activePlace: Place?
     @Published var placeProblem: String?
 
+    /// Tunnels an admin shared with every user on this Mac (no keys).
+    @Published var shared: [SharedTunnelInfo] = []
+
+    /// Marks a tunnel busy around a helper call that returns the new status list.
+    func runBusy(_ name: String, _ body: () async throws -> [TunnelStatus]?) async {
+        busyNames.insert(name)
+        expectedDown.insert(name)
+        defer { busyNames.remove(name); expectedDown.remove(name) }
+        do {
+            apply(try await body())
+            failures[name] = nil
+        } catch {
+            failures[name] = String(describing: error)
+            addLog("\(name): \(error)", isError: true)
+        }
+    }
+
     /// Multi-hop pairs; see `ChainsView`.
     @Published var chains: [HopChain] = []
     /// Tunnel → the hop it was connected through.
@@ -355,6 +372,7 @@ final class TunnelStore: ObservableObject {
             helperReachable = true
             apply(r.status)
             checkHandshake()
+            if menuOpen || windowOpen { await refreshShared() }
         } catch {
             helperReachable = false
             apply([])
@@ -1006,6 +1024,8 @@ final class TunnelStore: ObservableObject {
         var home = Place(name: "Home", values: ["HomeWiFi"])
         home.dnsMode = .quad9; home.connect = ["home"]; home.shortcut = "Lights on"
         places = [home, office]
+        shared = [SharedTunnelInfo(name: "family", endpoint: "home.example.com:51820", addresses: ["10.8.0.9/32"],
+                                   policy: SharePolicy(usersCanConnect: true, usersCanDisconnect: false))]
         chains = [HopChain(hop: "office", exit: "tokyo-vps"), HopChain(hop: "home", exit: "office")]
         viaOf["office"] = "home"
         activePlace = home

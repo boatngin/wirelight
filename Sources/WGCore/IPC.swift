@@ -65,6 +65,26 @@ public enum Request: Codable, Equatable, Sendable {
     case applyPlace(PlaceNetworkSettings?)
     /// Empty the system DNS cache.
     case flushDNS
+    /// Admin: store a tunnel root-only so every local user can use it (replaces one with the same name).
+    case shareTunnel(name: String, config: String, options: UpOptions, policy: SharePolicy)
+    /// Admin: change what other users may do with a shared tunnel.
+    case setSharePolicy(name: String, policy: SharePolicy)
+    /// Admin: stop sharing (disconnects it if up).
+    case unshareTunnel(name: String)
+    /// Any user: shared tunnels without their keys, in `Response.shared`.
+    case listShared
+    /// Bring a shared tunnel up from the helper's own copy.
+    case upShared(name: String)
+}
+
+extension Request {
+    /// Requests a non-admin user may send; the helper checks share policies on top.
+    public var allowedForStandardUsers: Bool {
+        switch self {
+        case .ping, .status, .listShared, .upShared, .down: return true
+        default: return false
+        }
+    }
 }
 
 public struct PeerStatus: Codable, Equatable, Sendable {
@@ -98,9 +118,11 @@ public struct Response: Codable, Equatable, Sendable {
     public var error: String?
     public var status: [TunnelStatus]?
     public var messages: [String]?
+    public var shared: [SharedTunnelInfo]?
 
-    public init(ok: Bool, error: String? = nil, status: [TunnelStatus]? = nil, messages: [String]? = nil) {
-        self.ok = ok; self.error = error; self.status = status; self.messages = messages
+    public init(ok: Bool, error: String? = nil, status: [TunnelStatus]? = nil, messages: [String]? = nil,
+                shared: [SharedTunnelInfo]? = nil) {
+        self.ok = ok; self.error = error; self.status = status; self.messages = messages; self.shared = shared
     }
     public static func failure(_ msg: String) -> Response { Response(ok: false, error: msg) }
 }

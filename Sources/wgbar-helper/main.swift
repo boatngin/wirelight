@@ -22,9 +22,10 @@ networkTimer.schedule(deadline: .now() + 15, repeating: 15)
 networkTimer.setEventHandler { controller.checkNetworkChange() }
 networkTimer.resume()
 
-/// Only root or members of the `admin` group may talk to the helper.
-func isAuthorized(_ fd: Int32) -> (Bool, uid_t) {
-    var uid: uid_t = 0, gid: gid_t = 0
+/// Whether the peer is root or in the `admin` group. Standard users get a limited
+/// request set (see `Request.allowedForStandardUsers`).
+func isAdmin(_ fd: Int32) -> (Bool, uid_t) {
+    var uid: uid_t = .max, gid: gid_t = .max  // never "root" if getpeereid fails
     guard getpeereid(fd, &uid, &gid) == 0 else { return (false, uid) }
     if uid == 0 { return (true, uid) }
     guard let adminGID = getgrnam("admin")?.pointee.gr_gid,
@@ -37,8 +38,23 @@ func isAuthorized(_ fd: Int32) -> (Bool, uid_t) {
     return (groups.prefix(Int(count)).contains(Int32(bitPattern: adminGID)), uid)
 }
 
-func handle(_ request: Request) -> Response {
+func handle(_ request: Request, uid: uid_t, isAdmin: Bool) -> Response {
     do {
+        if !isAdmin {
+            guard request.allowedForStandardUsers else { return .failure("permission denied: needs an administrator") }
+            // Standard users may only touch shared tunnels, and only as the admin allowed.
+            switch request {
+            case let .upShared(name):
+                guard SharedStore.load(name)?.policy.usersCanConnect == true else {
+                    return .failure("permission denied: an administrator hasn't allowed connecting '\(name)'")
+                }
+            case let .down(name):
+                guard SharedStore.load(name)?.policy.usersCanDisconnect == true else {
+                    return .failure("permission denied: you can't disconnect '\(name)'")
+                }
+            default: break
+            }
+        }
         switch request {
         case .ping:
             return Response(ok: true)
@@ -64,6 +80,31 @@ func handle(_ request: Request) -> Response {
         case .flushDNS:
             controller.flushDNS()
             return Response(ok: true)
+        case let .shareTunnel(name, config, options, policy):
+            guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
+            if let err = options.validationError() { throw TunnelError.interfaceStartFailed(err) }
+            _ = try WGConfig(parsing: config) // never store something that can't run
+            log("request: share \(name) (connect: \(policy.usersCanConnect), disconnect: \(policy.usersCanDisconnect))")
+            try SharedStore.save(SharedTunnel(name: name, config: config, options: options, policy: policy, owner: uid))
+            return Response(ok: true, shared: SharedStore.all().map(SharedStore.info))
+        case let .setSharePolicy(name, policy):
+            guard var t = SharedStore.load(name) else { throw TunnelError.notUp("shared '\(name)'") }
+            t.policy = policy
+            try SharedStore.save(t)
+            log("request: share policy \(name) (connect: \(policy.usersCanConnect), disconnect: \(policy.usersCanDisconnect))")
+            return Response(ok: true, shared: SharedStore.all().map(SharedStore.info))
+        case let .unshareTunnel(name):
+            log("request: unshare \(name)")
+            if controller.status().contains(where: { $0.name == name }) { try? controller.down(name: name) }
+            SharedStore.remove(name)
+            return Response(ok: true, status: controller.status(), shared: SharedStore.all().map(SharedStore.info))
+        case .listShared:
+            return Response(ok: true, shared: SharedStore.all().map(SharedStore.info))
+        case let .upShared(name):
+            guard let t = SharedStore.load(name) else { throw TunnelError.notUp("shared '\(name)'") }
+            log("request: up shared \(name) by uid \(uid)")
+            try controller.up(name: name, configText: t.config, options: t.options)
+            return Response(ok: true, status: controller.status())
         case let .upWithOptions(name, config, options):
             log("request: up \(name) (split DNS: \(options.splitDNSDomains.count), exclusions: \(options.excludedCIDRs.count))")
             try controller.up(name: name, configText: config, options: options)
@@ -80,20 +121,17 @@ func handle(_ request: Request) -> Response {
 
 func serve(_ fd: Int32) {
     UnixSocket.setTimeout(fd, seconds: 5)
-    let (allowed, uid) = isAuthorized(fd)
+    let (admin, uid) = isAdmin(fd)
     let response: Response
     let callerProblem = uid == 0 ? nil : CallerCheck.verify(fd)
-    if !allowed {
-        log("rejected connection from uid \(uid) (not admin)", error: true)
-        response = .failure("permission denied: user must be an administrator")
-    } else if let callerProblem {
+    if let callerProblem {
         log("rejected connection from uid \(uid): \(callerProblem)", error: true)
         response = .failure("permission denied: \(callerProblem)")
     } else {
         do {
             let body = try UnixSocket.readFrame(fd, maxSize: maxRequestSize)
             let request = try IPCFraming.decodeBody(Request.self, from: body)
-            response = controllerQueue.sync { handle(request) }
+            response = controllerQueue.sync { handle(request, uid: uid, isAdmin: admin) }
         } catch {
             log("bad request from uid \(uid): \(error)", error: true)
             response = .failure("bad request: \(error)")

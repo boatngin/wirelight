@@ -326,6 +326,13 @@ struct TunnelDetailView: View {
                 PillButton(icon: "pencil", title: "Edit") { store.openBuilder(edit: profile.name) }
                 PillButton(icon: "square.and.arrow.up", title: "Export") { exportConfig() }
                 PillButton(icon: "plus.square.on.square", title: "Duplicate") { store.duplicate(profile.name) }
+                if TunnelStore.isAdminUser {
+                    let isShared = store.sharedInfo(profile.name) != nil
+                    PillButton(icon: "person.2", title: isShared ? "Update share" : "Share") {
+                        Task { await store.share(profile.name, policy: store.sharedInfo(profile.name)?.policy ?? SharePolicy()) }
+                    }
+                    .help("Keep a root-only copy so every user on this Mac can use it (they never see the keys)")
+                }
                 Spacer()
             }
             if let testResult {
