@@ -13,9 +13,12 @@ public struct UpOptions: Codable, Equatable, Sendable {
     public var killSwitch: Bool
     /// When the tunnel takes all IPv4 but not IPv6, drop IPv6 instead of letting it bypass the tunnel.
     public var blockIPv6: Bool
+    /// Multi-hop: reach this tunnel's server through the named tunnel, which must already be up.
+    public var via: String?
 
     public init(splitDNSDomains: [String] = [], excludedCIDRs: [String] = [], killSwitch: Bool = false,
-                blockIPv6: Bool = false) {
+                blockIPv6: Bool = false, via: String? = nil) {
+        self.via = via
         self.splitDNSDomains = splitDNSDomains
         self.excludedCIDRs = excludedCIDRs
         self.killSwitch = killSwitch
@@ -29,12 +32,14 @@ public struct UpOptions: Codable, Equatable, Sendable {
         excludedCIDRs = try c.decodeIfPresent([String].self, forKey: .excludedCIDRs) ?? []
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
         blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
+        via = try c.decodeIfPresent(String.self, forKey: .via)
     }
 
     /// Returns a description of the first invalid entry, or nil.
     public func validationError() -> String? {
         for d in splitDNSDomains where !Validation.isValidHostname(d) { return "invalid split DNS domain '\(d)'" }
         for c in excludedCIDRs where !Validation.isValidCIDR(c) { return "invalid excluded CIDR '\(c)'" }
+        if let v = via, !Validation.isValidTunnelName(v) { return "invalid hop tunnel '\(v)'" }
         if splitDNSDomains.count > 64 || excludedCIDRs.count > 256 { return "too many entries" }
         return nil
     }

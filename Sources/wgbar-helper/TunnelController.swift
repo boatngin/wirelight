@@ -27,6 +27,10 @@ struct TunnelState: Codable {
     var blockIPv6: Bool?
     /// The tunnel's IPv6 CIDRs, published to configd so macOS asks for AAAA records.
     var ipv6Published: [String]?
+    /// Multi-hop: the tunnel this one's server is reached through.
+    var via: String?
+    /// Host CIDRs added to the hop's peer AllowedIPs for this tunnel's endpoints.
+    var viaAllowed: [String]?
 }
 
 enum TunnelError: Error, CustomStringConvertible {
@@ -107,6 +111,13 @@ final class TunnelController {
         state.excludedCIDRs = options.excludedCIDRs
         state.killSwitch = options.killSwitch
         state.blockIPv6 = options.blockIPv6
+        if let hop = options.via {
+            guard hop != name, tunnels[hop] != nil else {
+                teardown(state)
+                throw TunnelError.interfaceStartFailed("hop tunnel '\(hop)' is not up")
+            }
+            state.via = hop
+        }
         state.peerEndpoints = Dictionary(uniqueKeysWithValues: config.peers.compactMap { p in
             p.endpoint.map { (p.publicKey, $0) }
         })
@@ -195,11 +206,14 @@ final class TunnelController {
         }
         let ips = NetworkConfigurator.resolvedEndpointIPs(utun: state.utun)
         state.endpointIPs = ips
+        if let hop = state.via.flatMap({ tunnels[$0] }) {
+            try routeThroughHop(ips, hop: hop, state: &state)
+        }
         let full4 = state.full4 ?? false
         // Blocked IPv6 still has to reach a v6 endpoint over the physical network.
         let full6 = (state.full6 ?? false) || (state.blockIPv6 == true && full4)
         guard full4 || full6 else { return }
-        for ip in ips {
+        for ip in physicalPins(state, ownEndpoints: ips) {
             let fam = NetworkConfigurator.family(of: ip)
             guard (fam == "inet" && full4) || (fam == "inet6" && full6),
                   let def = NetworkConfigurator.defaultRoute(family: fam),
@@ -210,7 +224,59 @@ final class TunnelController {
         }
     }
 
-    private func isEndpointRoute(_ r: RouteEntry, utun: String) -> Bool { r.interface != utun && r.blackhole != true }
+    private func isEndpointRoute(_ r: RouteEntry, utun: String) -> Bool {
+        r.interface != utun && r.blackhole != true && r.via != true
+    }
+
+    // MARK: multi-hop
+
+    /// Sends this tunnel's endpoint traffic into the hop tunnel: a host route via the
+    /// hop's interface, and the endpoint added to the hop peer's AllowedIPs so wg
+    /// accepts it (cryptokey routing).
+    private func routeThroughHop(_ ips: [String], hop: TunnelState, state: inout TunnelState) throws {
+        guard let (peer, allowed) = hopPeer(hop.utun) else {
+            throw TunnelError.interfaceStartFailed("hop tunnel '\(hop.name)' has no peer")
+        }
+        var added: [String] = []
+        for ip in ips {
+            let fam = NetworkConfigurator.family(of: ip)
+            let host = ip + (fam == "inet6" ? "/128" : "/32")
+            if !allowed.contains(host) && !allowed.contains(fam == "inet6" ? "::/0" : "0.0.0.0/0") { added.append(host) }
+            try addRoute(RouteEntry(family: fam, destination: ip, interface: hop.utun, via: true), state: &state)
+        }
+        if !added.isEmpty {
+            try Shell.run(.wg, ["set", hop.utun, "peer", peer, "allowed-ips", (allowed + added).joined(separator: ",")])
+        }
+        state.viaAllowed = added
+        save(state)
+        log("\(state.name): server reached through \(hop.name) (\(ips.joined(separator: ", ")))")
+    }
+
+    /// Endpoints that must bypass this tunnel: its own, or for a chained tunnel the
+    /// hop's server (its own server goes into the hop instead), so a route-all exit
+    /// can't swallow the hop's packets.
+    private func physicalPins(_ state: TunnelState, ownEndpoints: [String]) -> [String] {
+        guard let hop = state.via.flatMap({ tunnels[$0] }) else { return ownEndpoints }
+        return NetworkConfigurator.resolvedEndpointIPs(utun: hop.utun)
+    }
+
+    /// The hop's first peer and its current AllowedIPs.
+    private func hopPeer(_ utun: String) -> (String, [String])? {
+        guard let out = try? Shell.run(.wg, ["show", utun, "allowed-ips"]).stdout,
+              let line = out.split(separator: "\n").first else { return nil }
+        let f = line.split(separator: "\t")
+        guard let pk = f.first.map(String.init), Validation.isValidKey(pk) else { return nil }
+        let allowed = f.count > 1 ? f[1].split(separator: " ").map(String.init).filter { $0 != "(none)" } : []
+        return (pk, allowed)
+    }
+
+    /// Takes back what `routeThroughHop` added to the hop's AllowedIPs.
+    private func releaseHop(_ state: TunnelState) {
+        guard let added = state.viaAllowed, !added.isEmpty, let hop = state.via.flatMap({ tunnels[$0] }),
+              let (peer, allowed) = hopPeer(hop.utun) else { return }
+        let rest = allowed.filter { !added.contains($0) }
+        _ = try? Shell.run(.wg, ["set", hop.utun, "peer", peer, "allowed-ips", rest.joined(separator: ",")])
+    }
 
     /// Moves endpoint and exclusion routes to the current default gateway. Routes that
     /// stay are changed in place (never deleted first), so endpoint packets can't loop
@@ -231,7 +297,7 @@ final class TunnelController {
         fresh.endpointIPs = ips
         let full4 = state.full4 ?? false
         let full6 = (state.full6 ?? false) || (state.blockIPv6 == true && full4)
-        for ip in ips where full4 || full6 {
+        for ip in physicalPins(state, ownEndpoints: ips) where full4 || full6 {
             let fam = NetworkConfigurator.family(of: ip)
             guard (fam == "inet" && full4) || (fam == "inet6" && full6),
                   let def = NetworkConfigurator.defaultRoute(family: fam), def.interface != state.utun else { continue }
@@ -357,6 +423,11 @@ final class TunnelController {
     func down(name: String) throws {
         guard Validation.isValidTunnelName(name) else { throw TunnelError.invalidName(name) }
         guard let state = tunnels[name] else { throw TunnelError.notUp(name) }
+        // Tunnels riding through this one would lose their server: take them down first.
+        for dependent in tunnels.values where dependent.via == name {
+            teardown(dependent)
+            log("\(dependent.name): down (its hop \(name) is going down)")
+        }
         teardown(state)
         log("\(name): down")
     }
@@ -398,6 +469,7 @@ final class TunnelController {
 
     /// Best-effort reverse of `up`: kill switch → DNS → routes → interface → state files.
     private func teardown(_ state: TunnelState) {
+        releaseHop(state)
         tunnels[state.name] = nil
         try? syncKillSwitch()
         if state.ipv6Published != nil { DynamicStore.remove(Self.ipv6Key(state.utun)) }

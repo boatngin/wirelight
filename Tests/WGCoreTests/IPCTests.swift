@@ -29,3 +29,12 @@ final class KillSwitchIPCTests: XCTestCase {
         XCTAssertFalse(o.killSwitch)
     }
 }
+
+final class ViaOptionTests: XCTestCase {
+    func testViaValidatedAndOptional() throws {
+        XCTAssertNil(UpOptions(via: "home").validationError())
+        XCTAssertNotNil(UpOptions(via: "../x").validationError())
+        let old = try JSONDecoder().decode(UpOptions.self, from: Data(#"{"splitDNSDomains":[],"excludedCIDRs":[]}"#.utf8))
+        XCTAssertNil(old.via)
+    }
+}
