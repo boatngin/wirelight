@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var newName = ""
     @AppStorage(MenuBarIcon.coloredKey) private var coloredIcon = false
     @AppStorage(NotchPill.enabledKey) private var notchPill = false
+    @ObservedObject private var updater = Updater.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -26,6 +27,14 @@ struct SettingsView: View {
                 set: { store.connectOnLaunch = $0 }))
 
             hotKeyRow
+
+            if updater.available {
+                HStack {
+                    Toggle("Check for updates automatically", isOn: $updater.automatic)
+                    Spacer()
+                    Button("Check Now") { updater.checkNow() }
+                }
+            }
 
             Divider()
             appearance

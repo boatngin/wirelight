@@ -31,7 +31,13 @@ jobs:
       - name: Test
         run: swift test
       - name: Build installer
+        env:
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
         run: scripts/build-pkg.sh "${{ steps.v.outputs.version }}"
+      - name: Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: scripts/make-appcast.sh "${{ steps.v.outputs.version }}"
       - name: Zip app
         run: |
           ditto -c -k --keepParent build/DerivedData-release/Build/Products/Release/Wirelight.app \
@@ -45,6 +51,7 @@ jobs:
         run: |
           FILES=(build/Wirelight.pkg "build/Wirelight-$VERSION.pkg" "build/Wirelight-$VERSION.pkg.sha256" \
                  "build/Wirelight-$VERSION.zip" "build/Wirelight-$VERSION.zip.sha256")
+          [[ -f build/appcast.xml ]] && FILES+=(build/appcast.xml)
            if gh release view "$TAG" >/dev/null 2>&1; then
              gh release upload "$TAG" "${FILES[@]}" --clobber
            else

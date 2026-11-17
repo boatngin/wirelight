@@ -32,14 +32,11 @@
 
 ## ติดตั้ง
 
-1. ติดตั้งเครื่องมือ WireGuard:
-   ```bash
-   brew install wireguard-tools wireguard-go
-   ```
-2. ดาวน์โหลด **[Wirelight.pkg](https://github.com/boatngin/wirelight/releases/latest/download/Wirelight.pkg)** แล้วเปิดเพื่อติดตั้ง
+1. ดาวน์โหลด **[Wirelight.pkg](https://github.com/boatngin/wirelight/releases/latest/download/Wirelight.pkg)** แล้วเปิดเพื่อติดตั้ง
+   - แพ็กเกจมี `wg` และ `wireguard-go` ที่ build จาก source ที่ pin ไว้มาให้แล้ว ไม่ต้องติดตั้งเพิ่ม
    - ตอนนี้ไฟล์ยังไม่ได้ notarize ถ้า macOS บล็อก ให้คลิกขวาที่ไฟล์แล้วเลือก **Open** หรือไปที่ **System Settings › Privacy & Security** แล้วกด **Open Anyway**
-3. เปิดแอป **Wirelight** แล้วเลือก **Import** และลากไฟล์ `.conf` มาวาง จากนั้นกดสวิตช์เพื่อเชื่อมต่อ
-4. ถ้า macOS ถามสิทธิ์ Keychain ให้กด **Always Allow**
+2. เปิดแอป **Wirelight** แล้วเลือก **Import** และลากไฟล์ `.conf` มาวาง จากนั้นกดสวิตช์เพื่อเชื่อมต่อ
+3. ถ้า macOS ถามสิทธิ์ Keychain ให้กด **Always Allow**
 
 ตรวจการติดตั้งด้วย `wgbarctl doctor`
 

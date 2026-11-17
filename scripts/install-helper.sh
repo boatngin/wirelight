@@ -26,6 +26,12 @@ sudo install -m 644 -o root -g wheel scripts/$LABEL.plist /Library/LaunchDaemons
 sudo install -d -m 755 /usr/local/bin
 sudo install -m 755 -o root -g wheel .build/release/wgbarctl /usr/local/bin/
 
+# Source builds run the app from DerivedData, which the helper's caller check
+# would refuse (a user could replace it). Opt this Mac into dev callers.
+sudo install -d -m 755 -o root -g wheel "/Library/Application Support/WGBar"
+sudo install -m 644 -o root -g wheel /dev/null "/Library/Application Support/WGBar/allow-dev-callers"
+echo "    Dev callers allowed. Remove /Library/Application Support/WGBar/allow-dev-callers to require installed builds."
+
 echo "==> (Re)loading LaunchDaemon"
 sudo launchctl bootout system/$LABEL 2>/dev/null || true
 sudo launchctl bootout system/com.thanaboat.wgbar.helper 2>/dev/null || true  # installs from before the rename

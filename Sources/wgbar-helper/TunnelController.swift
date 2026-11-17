@@ -570,7 +570,8 @@ final class TunnelController {
                    let owner = attrs[.ownerAccountID] as? NSNumber, owner.intValue != 0 {
                     note = " (not root-owned: a local user could replace it)"
                 }
-                out.append("ok    \(tool.rawValue): \(url.path)\(note)")
+                let source = url.path.hasPrefix(Tool.bundledDir) ? " (bundled)" : ""
+                out.append("ok    \(tool.rawValue): \(url.path)\(source)\(note)")
             } else {
                 out.append("FAIL  \(tool.rawValue): not found")
             }

@@ -13,9 +13,13 @@ func log(_ message: String, error: Bool = false) {
 enum Tool: String {
     case wireguardGo = "wireguard-go", wg, ifconfig, route, networksetup, pfctl, dscacheutil, killall
 
+    /// Copies built from pinned sources and installed by the package (root-owned).
+    static let bundledDir = "/Library/PrivilegedHelperTools/wirelight-tools"
+
     var candidates: [String] {
         switch self {
-        case .wireguardGo, .wg: return ["/opt/homebrew/bin/\(rawValue)", "/usr/local/bin/\(rawValue)"]
+        case .wireguardGo, .wg:
+            return ["\(Self.bundledDir)/\(rawValue)", "/opt/homebrew/bin/\(rawValue)", "/usr/local/bin/\(rawValue)"]
         case .ifconfig: return ["/sbin/ifconfig"]
         case .route: return ["/sbin/route"]
         case .networksetup: return ["/usr/sbin/networksetup"]
@@ -39,7 +43,7 @@ enum ShellError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case let .binaryNotFound(t): return "\(t) not found (install with: brew install wireguard-tools wireguard-go)"
+        case let .binaryNotFound(t): return "\(t) not found (reinstall Wirelight, or: brew install wireguard-tools wireguard-go)"
         case let .failed(t, a, s, e):
             let msg = e.trimmingCharacters(in: .whitespacesAndNewlines)
             return "\(t) \(a.joined(separator: " ")) exited \(s)\(msg.isEmpty ? "" : ": \(msg)")"
@@ -53,6 +57,11 @@ private final class DataBox: @unchecked Sendable { var data = Data() }
 enum Shell {
     static func resolve(_ tool: Tool) throws -> URL {
         for p in tool.candidates where FileManager.default.isExecutableFile(atPath: p) {
+            // A bundled copy is only trusted while no user could have replaced it.
+            if p.hasPrefix(Tool.bundledDir), !CallerCheck.isRootOnly(p, walkUp: true) {
+                log("ignoring \(p): not root-only", error: true)
+                continue
+            }
             return URL(fileURLWithPath: p)
         }
         throw ShellError.binaryNotFound(tool.rawValue)

@@ -26,5 +26,9 @@
 	<true/>
 	<key>NSLocationUsageDescription</key>
 	<string>Wirelight reads the name of the current Wi-Fi network to connect or disconnect tunnels automatically (on demand). The name is only used on this Mac and never leaves it.</string>
+	<key>SUFeedURL</key>
+	<string>https://github.com/boatngin/wirelight/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_KEY)</string>
 </dict>
 </plist>

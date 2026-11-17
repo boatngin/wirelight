@@ -29,15 +29,22 @@ xcodebuild -project App/Wirelight.xcodeproj -scheme Wirelight -configuration Rel
     ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NO" \
     CODE_SIGN_IDENTITY="${APP_SIGN_IDENTITY:--}" DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}" \
+    SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-}" \
     build | grep -E "error:|BUILD" || true
 APP="build/DerivedData-release/Build/Products/Release/Wirelight.app"
 [[ -d "$APP" ]] || { echo "app build failed" >&2; exit 1; }
+
+echo "==> Building WireGuard tools from pinned sources"
+scripts/build-wg-tools.sh "$OUT/wg-tools"
 
 echo "==> Staging payload"
 install -d "$ROOT/Applications" "$ROOT/Library/PrivilegedHelperTools" "$ROOT/Library/LaunchDaemons" \
            "$ROOT/usr/local/bin" "$ROOT/usr/local/share/wirelight"
 ditto "$APP" "$ROOT/Applications/Wirelight.app"
 install -m 755 "$BIN/wgbar-helper" "$ROOT/Library/PrivilegedHelperTools/"
+install -d "$ROOT/Library/PrivilegedHelperTools/wirelight-tools"
+install -m 755 "$OUT/wg-tools/wg" "$OUT/wg-tools/wireguard-go" "$ROOT/Library/PrivilegedHelperTools/wirelight-tools/"
+install -m 644 "$OUT/wg-tools/VERSIONS" "$ROOT/Library/PrivilegedHelperTools/wirelight-tools/"
 install -m 755 "$BIN/wgbarctl" "$ROOT/usr/local/bin/"
 install -m 644 scripts/io.github.boatngin.wirelight.helper.plist "$ROOT/Library/LaunchDaemons/"
 install -m 755 installer/uninstall.sh "$ROOT/usr/local/share/wirelight/uninstall.sh"

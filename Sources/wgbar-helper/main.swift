@@ -82,9 +82,13 @@ func serve(_ fd: Int32) {
     UnixSocket.setTimeout(fd, seconds: 5)
     let (allowed, uid) = isAuthorized(fd)
     let response: Response
+    let callerProblem = uid == 0 ? nil : CallerCheck.verify(fd)
     if !allowed {
         log("rejected connection from uid \(uid) (not admin)", error: true)
         response = .failure("permission denied: user must be an administrator")
+    } else if let callerProblem {
+        log("rejected connection from uid \(uid): \(callerProblem)", error: true)
+        response = .failure("permission denied: \(callerProblem)")
     } else {
         do {
             let body = try UnixSocket.readFrame(fd, maxSize: maxRequestSize)

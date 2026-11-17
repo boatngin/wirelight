@@ -5,6 +5,8 @@ import SwiftUI
 struct WirelightApp: App {
     @StateObject private var store = TunnelStore()
 
+    init() { _ = Updater.shared }
+
     var body: some Scene {
         MenuBarExtra {
             MenuView()
