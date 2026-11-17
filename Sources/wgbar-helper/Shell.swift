@@ -11,7 +11,7 @@ func log(_ message: String, error: Bool = false) {
 
 /// Binaries the helper may execute, resolved from a fixed allowlist of absolute paths.
 enum Tool: String {
-    case wireguardGo = "wireguard-go", wg, ifconfig, route, networksetup, pfctl
+    case wireguardGo = "wireguard-go", wg, ifconfig, route, networksetup, pfctl, dscacheutil, killall
 
     var candidates: [String] {
         switch self {
@@ -20,6 +20,8 @@ enum Tool: String {
         case .route: return ["/sbin/route"]
         case .networksetup: return ["/usr/sbin/networksetup"]
         case .pfctl: return ["/sbin/pfctl"]
+        case .dscacheutil: return ["/usr/bin/dscacheutil"]
+        case .killall: return ["/usr/bin/killall"]
         }
     }
 }

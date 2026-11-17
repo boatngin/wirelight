@@ -135,6 +135,11 @@ final class TunnelStore: ObservableObject {
     @Published var mainSection: SidebarItem? = .all
     /// Tunnel selected in the dashboard list.
     @Published var mainSelection: String?
+    @Published var places: [Place] = []
+    /// The Place currently applied (first match for the current network).
+    @Published var activePlace: Place?
+    @Published var placeProblem: String?
+
     /// Tunnel open in the builder; nil while creating a new one.
     @Published var builderTarget: String?
     /// Config text (and suggested name) handed to the builder, e.g. from Import.
@@ -217,6 +222,9 @@ final class TunnelStore: ObservableObject {
         }
         Self.migrateLegacyDefaults()
         loadProfiles()
+        places = loadPlaces()
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
+                                               queue: .main) { _ in PlaceQuitHook.restore() }
         selectedName = UserDefaults.standard.string(forKey: Keys.selected) ?? profiles.first?.name
         hotKey.onTrigger = { [weak self] in Task { @MainActor in await self?.toggle() } }
         hotKey.update(toggleHotKey)
@@ -672,6 +680,7 @@ final class TunnelStore: ObservableObject {
         let net = currentNetwork()
         if !force, net == lastNetwork { return }
         lastNetwork = net
+        await evaluatePlaces(net)
         let place = net.wifiSSID.map { "Wi-Fi '\($0)'" } ?? (net.onEthernet ? "Ethernet" : "no network")
         for p in profiles where p.onDemand {
             guard let d = NetworkRules.decide(p.rules, fallback: p.otherwise, on: net) else { continue }
@@ -953,6 +962,15 @@ final class TunnelStore: ObservableObject {
         since["office"] = now.addingTimeInterval(-1800)
         failures["tokyo-vps"] = "wireguard-go failed: control socket for utun9 did not appear"
         quality.enabled = true
+        var office = Place(name: "Office dock", kind: .ethernet, values: ["10.20.0.0/16"])
+        office.dnsMode = .custom; office.customDNS = ["10.20.0.53"]
+        office.proxy = ProxySetting(mode: .manual, http: "proxy.corp.example:3128", https: "proxy.corp.example:3128",
+                                    bypass: ["*.corp.example", "10.0.0.0/8"])
+        office.disconnect = ["office"]
+        var home = Place(name: "Home", values: ["HomeWiFi"])
+        home.dnsMode = .quad9; home.connect = ["home"]; home.shortcut = "Lights on"
+        places = [home, office]
+        activePlace = home
         qualitySamples["home"] = (0..<60).map { i -> QualitySample in
             let t = Double(i)
             let spike: Double = i % 17 == 0 ? 40 : 0
