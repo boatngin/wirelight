@@ -29,3 +29,13 @@ final class RouteEntryTests: XCTestCase {
         XCTAssertEqual(RouteEntry(family: "inet", destination: "1.2.3.4", interface: "en0").targetArgs, ["-interface", "en0"])
     }
 }
+
+final class LoopGuardTests: XCTestCase {
+    func testRulesPerTunnelAndPort() {
+        let r = PFGuard.loopRules([("utun5", 51820), ("utun6", 0), ("en0", 1), ("utun7; pass", 9)])
+        XCTAssertTrue(r.contains("block drop out quick on utun5 proto udp from any port 51820"))
+        XCTAssertFalse(r.contains("utun6"))
+        XCTAssertFalse(r.contains("en0"))
+        XCTAssertFalse(r.contains("pass"))
+    }
+}

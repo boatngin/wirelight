@@ -75,6 +75,8 @@ public enum Request: Codable, Equatable, Sendable {
     case listShared
     /// Bring a shared tunnel up from the helper's own copy.
     case upShared(name: String)
+    /// Replace the routes a tunnel learned after connecting (see `DynamicRoutes`).
+    case setDynamicRoutes(name: String, cidrs: [String])
 }
 
 extension Request {

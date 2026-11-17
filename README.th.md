@@ -28,6 +28,7 @@
 - **Network Doctor**: หา VPN ตัวอื่น, route ที่แย่ง traffic ของ tunnel, AllowedIPs ที่ทับ LAN หรือทับกันเอง และ DNS ที่แอปอื่นแก้ทับ
 - **กฎตามเครือข่าย**: แต่ละ tunnel ต่อหรือตัดเองตามชื่อ Wi-Fi, Wi-Fi ใดก็ได้, Ethernet ตาม subnet หรือ Ethernet ใดก็ได้ และกำหนดว่า "ที่อื่น ๆ" ให้ทำอะไร
 - **Shortcuts และ Siri**: มี action Connect/Disconnect Tunnel, Disconnect All, Connect Favorites และ Get Connected Tunnels
+- **Learned routes**: รันคำสั่งที่คุณกำหนดหลังเชื่อมต่อ (เช่น inventory script หรือ cloud CLI) แล้ว route IP/CIDR ที่มันพิมพ์ออกมาผ่าน tunnel ถ้าคำสั่งล้มเหลวจะใช้รายการล่าสุดที่ใช้ได้
 - **Route all traffic**: ส่งทุกอย่างผ่าน tunnel ด้วยคลิกเดียว
 - **เปิดหลาย tunnel พร้อมกัน**: บ้าน ที่ทำงาน และ lab เปิดคู่กันได้ แต่ละอันมีสวิตช์และความเร็วของตัวเอง (route all ได้ทีละอัน) มีปุ่ม Favorites on และ All off
 - **ต่อเนื่อง**: resolve endpoint ใหม่หลังเครื่องตื่นจาก sleep หรือเปลี่ยนเครือข่าย และเตือนเมื่อ handshake หาย

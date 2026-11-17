@@ -38,6 +38,7 @@
 - **QR code import**: drop, choose or paste a QR code image (like the ones the WireGuard mobile apps show) to import a tunnel, decoded on your Mac.
 - **Copy your public key**: the tunnel's own public key is one click away when you need to send it to a peer.
 - **Split DNS**: send only some domains (like `lan` or `corp.example`) to the tunnel's DNS.
+- **Learned routes**: a command you choose runs after connecting (an inventory script, a cloud CLI); the IPs and CIDRs it prints are routed through the tunnel, with the last good list as a fallback.
 - **Split tunnel exclusions**: keep chosen CIDRs off the tunnel, even when routing all traffic.
 - **Route all traffic**: full-tunnel mode in one click.
 - **Link quality** (optional, off by default): latency, packet loss and a Good / Fair / Poor grade per tunnel with a chart, plus a speed test against an HTTPS file you choose.
