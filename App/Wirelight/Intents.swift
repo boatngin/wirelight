@@ -73,7 +73,7 @@ struct DisconnectAllIntent: AppIntent {
     @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = try await IntentStore.get()
         await store.disconnectAll()
-        return .result(dialog: store.isConnected ? "Some tunnels are still up." : "All tunnels are off.")
+        return .result(dialog: IntentDialog(stringLiteral: store.isConnected ? "Some tunnels are still up." : "All tunnels are off."))
     }
 }
 
@@ -95,7 +95,7 @@ struct ConnectedTunnelsIntent: AppIntent {
         let store = try await IntentStore.get()
         await store.refresh()
         let names = store.activeNames
-        return .result(value: names, dialog: names.isEmpty ? "No tunnels are connected." : "\(names.joined(separator: ", "))")
+        return .result(value: names, dialog: IntentDialog(stringLiteral: names.isEmpty ? "No tunnels are connected." : names.joined(separator: ", ")))
     }
 }
 
