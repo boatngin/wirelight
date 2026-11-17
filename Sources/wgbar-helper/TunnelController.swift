@@ -419,6 +419,16 @@ final class TunnelController {
         unlink(statePath(state.name))
     }
 
+    /// If a tunnel holds DNS on `service`, make `setting` what it restores later. Returns true if one did.
+    func handOverTunnelDNSBackup(service: String, to setting: DNSSetting) -> Bool {
+        let owners = tunnels.values.filter { $0.dnsWanted != nil && $0.dnsBackup?[service] != nil }
+        for var s in owners {
+            s.dnsBackup?[service] = setting
+            save(s)
+        }
+        return !owners.isEmpty
+    }
+
     /// The most recently started other tunnel that has set DNS on `service`.
     private func otherDNSOwner(service: String, excluding name: String) -> TunnelState? {
         tunnels.values.filter { $0.name != name && $0.dnsWanted != nil && $0.dnsBackup?[service] != nil }
@@ -522,6 +532,8 @@ final class TunnelController {
     /// that are still alive and clean up the rest.
     func recoverOnStart() {
         PFGuard.remove()
+        // A Place left behind by a crash: put the user's DNS/proxy back; the app reapplies it.
+        if loadPlace() != nil { try? applyPlace(nil) }
         guard let files = try? fm.contentsOfDirectory(atPath: Self.stateDir) else { return }
         for file in files where file.hasSuffix(".state.json") {
             let path = "\(Self.stateDir)/\(file)"

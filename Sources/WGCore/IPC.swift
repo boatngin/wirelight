@@ -52,6 +52,10 @@ public enum Request: Codable, Equatable, Sendable {
     case setKillSwitch(name: String, enabled: Bool)
     /// Helper-side diagnostics, returned in `Response.messages`.
     case doctor
+    /// Apply a Place's DNS/proxy to the network service with the default route; nil restores the originals.
+    case applyPlace(PlaceNetworkSettings?)
+    /// Empty the system DNS cache.
+    case flushDNS
 }
 
 public struct PeerStatus: Codable, Equatable, Sendable {

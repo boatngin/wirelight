@@ -57,6 +57,13 @@ func handle(_ request: Request) -> Response {
             return Response(ok: true, status: controller.status())
         case .doctor:
             return Response(ok: true, messages: controller.doctor())
+        case let .applyPlace(settings):
+            log("request: place \(settings == nil ? "restore" : "apply")")
+            try controller.applyPlace(settings)
+            return Response(ok: true)
+        case .flushDNS:
+            controller.flushDNS()
+            return Response(ok: true)
         case let .upWithOptions(name, config, options):
             log("request: up \(name) (split DNS: \(options.splitDNSDomains.count), exclusions: \(options.excludedCIDRs.count))")
             try controller.up(name: name, configText: config, options: options)

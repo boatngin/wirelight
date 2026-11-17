@@ -15,6 +15,28 @@ enum LocalAddresses {
         names.isEmpty ? [] : all().filter { names.contains($0.interface) }.map(\.address).sorted()
     }
 
+    /// IPv4 networks this Mac is directly on, as CIDRs (e.g. 192.168.1.0/24).
+    static func ipv4Subnets() -> [String] {
+        var out: [String] = []
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0 else { return [] }
+        defer { freeifaddrs(head) }
+        var p = head
+        while let ifa = p?.pointee {
+            defer { p = ifa.ifa_next }
+            let name = String(cString: ifa.ifa_name)
+            guard let sa = ifa.ifa_addr, let nm = ifa.ifa_netmask, sa.pointee.sa_family == AF_INET,
+                  !name.hasPrefix("utun"), !name.hasPrefix("lo") else { continue }
+            let addr = sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { UInt32(bigEndian: $0.pointee.sin_addr.s_addr) }
+            let mask = nm.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { UInt32(bigEndian: $0.pointee.sin_addr.s_addr) }
+            guard mask != 0, mask != .max else { continue }
+            let net = addr & mask
+            let cidr = "\(net >> 24).\((net >> 16) & 255).\((net >> 8) & 255).\(net & 255)/\(mask.nonzeroBitCount)"
+            if !out.contains(cidr) { out.append(cidr) }
+        }
+        return out
+    }
+
     private static func all() -> [(address: String, v6: Bool, interface: String)] {
         var out: [(String, Bool, String)] = []
         var head: UnsafeMutablePointer<ifaddrs>?
