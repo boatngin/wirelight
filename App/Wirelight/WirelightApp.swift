@@ -5,7 +5,10 @@ import SwiftUI
 struct WirelightApp: App {
     @StateObject private var store = TunnelStore()
 
-    init() { _ = Updater.shared }
+    init() {
+        _ = Updater.shared
+        _ = Toolbox.shared // starts enabled SSH forwards
+    }
 
     var body: some Scene {
         MenuBarExtra {
