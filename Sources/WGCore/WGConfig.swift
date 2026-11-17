@@ -32,6 +32,32 @@ public struct WGInterface: Equatable, Sendable {
     public var dnsSearch: [String] = []
     public var mtu: Int?
     public var listenPort: Int?
+    /// AmneziaWG obfuscation parameters (Jc, Jmin, Jmax, S1–S4, H1–H4, I1–I5), canonical key → value.
+    public var amnezia: [String: String] = [:]
+
+    /// True when the config needs the AmneziaWG engine; plain `wg` can't read these keys.
+    public var isAmnezia: Bool { !amnezia.isEmpty }
+
+    /// AmneziaWG keys in the order they're written.
+    public static let amneziaKeys = ["Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4",
+                                     "H1", "H2", "H3", "H4", "I1", "I2", "I3", "I4", "I5"]
+
+    /// Ints for J/S, an int or "a-b" range for H, a tag string like `<b 0x01><r 16>` for I.
+    static func isValidAmnezia(_ key: String, _ v: String) -> Bool {
+        switch key.first {
+        case "J", "S": return UInt32(v) != nil
+        case "H":
+            let parts = v.split(separator: "-", omittingEmptySubsequences: false)
+            return (1...2).contains(parts.count) && parts.allSatisfy { UInt32($0) != nil }
+        default:
+            return (1...4096).contains(v.count)
+                && v.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || " <>".contains($0)) }
+        }
+    }
+
+    public var amneziaLines: [String] {
+        Self.amneziaKeys.compactMap { k in amnezia[k].map { "\(k) = \($0)" } }
+    }
 
     /// Public key derived from `privateKey`; safe to share with the peer's admin.
     public var publicKey: String? {
@@ -135,8 +161,11 @@ public struct WGConfig: Equatable, Sendable {
     }
 
     private static func buildInterface(_ d: [String: (Int, String)]) throws -> WGInterface {
+        let amneziaByLower = Dictionary(uniqueKeysWithValues: WGInterface.amneziaKeys.map { ($0.lowercased(), $0) })
         let allowed: Set<String> = ["privatekey", "address", "dns", "mtu", "listenport"]
-        for (k, v) in d where !allowed.contains(k) { throw WGConfigError.unsupportedKey(line: v.0, k) }
+        for (k, v) in d where !allowed.contains(k) && amneziaByLower[k] == nil {
+            throw WGConfigError.unsupportedKey(line: v.0, k)
+        }
 
         guard let pk = d["privatekey"] else { throw WGConfigError.missing("Interface.PrivateKey") }
         guard Validation.isValidKey(pk.1) else {
@@ -163,6 +192,11 @@ public struct WGConfig: Equatable, Sendable {
         }
         if let m = d["mtu"] { i.mtu = try int(m, key: "MTU", range: 576...9000) }
         if let p = d["listenport"] { i.listenPort = try int(p, key: "ListenPort", range: 0...65535) }
+        for (lower, key) in amneziaByLower {
+            guard let v = d[lower] else { continue }
+            guard WGInterface.isValidAmnezia(key, v.1) else { throw WGConfigError.invalidValue(line: v.0, key: key, value: v.1) }
+            i.amnezia[key] = v.1
+        }
         return i
     }
 
@@ -219,6 +253,7 @@ public struct WGConfig: Equatable, Sendable {
     public func wgSetconfText() -> String {
         var out = ["[Interface]", "PrivateKey = \(interface.privateKey)"]
         if let lp = interface.listenPort { out.append("ListenPort = \(lp)") }
+        out += interface.amneziaLines
         return (out + peerLines()).joined(separator: "\n") + "\n"
     }
 
@@ -230,6 +265,7 @@ public struct WGConfig: Equatable, Sendable {
         if !dns.isEmpty { out.append("DNS = \(dns.joined(separator: ", "))") }
         if let m = interface.mtu { out.append("MTU = \(m)") }
         if let lp = interface.listenPort { out.append("ListenPort = \(lp)") }
+        out += interface.amneziaLines
         return (out + peerLines()).joined(separator: "\n") + "\n"
     }
 }

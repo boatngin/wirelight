@@ -61,7 +61,7 @@ final class TunnelController {
     private let fm = FileManager.default
 
     init() {
-        for dir in [Self.runDir, Self.stateDir] {
+        for dir in [Self.runDir, Engine.amneziaRunDir, Self.stateDir] {
             try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true,
                                     attributes: [.posixPermissions: 0o700])
         }
@@ -69,7 +69,7 @@ final class TunnelController {
 
     private func statePath(_ name: String) -> String { "\(Self.stateDir)/\(name).state.json" }
     private func nameFile(_ name: String) -> String { "\(Self.runDir)/\(name).name" }
-    private func uapiSocket(_ utun: String) -> String { "\(Self.runDir)/\(utun).sock" }
+    private func uapiSocket(_ utun: String) -> String { Engine.socket(utun) }
 
     private func save(_ s: TunnelState) {
         tunnels[s.name] = s
@@ -95,7 +95,10 @@ final class TunnelController {
         let config = try WGConfig(parsing: configText)
 
         try? fm.removeItem(atPath: nameFile(name))
-        try Shell.run(.wireguardGo, ["utun"], env: ["WG_TUN_NAME_FILE": nameFile(name)], captureOutput: false)
+        // AmneziaWG also speaks plain WireGuard, so it can run any config on request.
+        let amnezia = config.interface.isAmnezia || options.amnezia
+        try Shell.run(amnezia ? .amneziawgGo : .wireguardGo, ["utun"],
+                      env: ["WG_TUN_NAME_FILE": nameFile(name)], captureOutput: false)
 
         guard let raw = try? String(contentsOfFile: nameFile(name), encoding: .utf8) else {
             throw TunnelError.interfaceStartFailed("no interface name written")
@@ -176,7 +179,7 @@ final class TunnelController {
             close(fd)
             throw error
         }
-        try Shell.run(.wg, ["setconf", utun, path])
+        try Shell.run(Engine.ctl(utun), ["setconf", utun, path])
     }
 
     private func addRoutes(_ config: WGConfig, state: inout TunnelState) throws {
@@ -245,7 +248,7 @@ final class TunnelController {
             try addRoute(RouteEntry(family: fam, destination: ip, interface: hop.utun, via: true), state: &state)
         }
         if !added.isEmpty {
-            try Shell.run(.wg, ["set", hop.utun, "peer", peer, "allowed-ips", (allowed + added).joined(separator: ",")])
+            try Shell.run(Engine.ctl(hop.utun), ["set", hop.utun, "peer", peer, "allowed-ips", (allowed + added).joined(separator: ",")])
         }
         state.viaAllowed = added
         save(state)
@@ -262,7 +265,7 @@ final class TunnelController {
 
     /// The hop's first peer and its current AllowedIPs.
     private func hopPeer(_ utun: String) -> (String, [String])? {
-        guard let out = try? Shell.run(.wg, ["show", utun, "allowed-ips"]).stdout,
+        guard let out = try? Shell.run(Engine.ctl(utun), ["show", utun, "allowed-ips"]).stdout,
               let line = out.split(separator: "\n").first else { return nil }
         let f = line.split(separator: "\t")
         guard let pk = f.first.map(String.init), Validation.isValidKey(pk) else { return nil }
@@ -275,7 +278,7 @@ final class TunnelController {
         guard let added = state.viaAllowed, !added.isEmpty, let hop = state.via.flatMap({ tunnels[$0] }),
               let (peer, allowed) = hopPeer(hop.utun) else { return }
         let rest = allowed.filter { !added.contains($0) }
-        _ = try? Shell.run(.wg, ["set", hop.utun, "peer", peer, "allowed-ips", rest.joined(separator: ",")])
+        _ = try? Shell.run(Engine.ctl(hop.utun), ["set", hop.utun, "peer", peer, "allowed-ips", rest.joined(separator: ",")])
     }
 
     /// Moves endpoint and exclusion routes to the current default gateway. Routes that
@@ -515,7 +518,7 @@ final class TunnelController {
         for var state in tunnels.values.sorted(by: { $0.name < $1.name }) {
             for (pk, ep) in (state.peerEndpoints ?? [:]).sorted(by: { $0.key < $1.key })
             where Validation.isValidKey(pk) && Validation.isValidEndpoint(ep) {
-                do { try Shell.run(.wg, ["set", state.utun, "peer", pk, "endpoint", ep]) }
+                do { try Shell.run(Engine.ctl(state.utun), ["set", state.utun, "peer", pk, "endpoint", ep]) }
                 catch { log("\(state.name): cannot re-resolve endpoint \(ep): \(error)", error: true) }
             }
 
@@ -563,7 +566,7 @@ final class TunnelController {
 
     func doctor() -> [String] {
         var out: [String] = []
-        for tool in [Tool.wireguardGo, .wg, .ifconfig, .route, .networksetup] {
+        for tool in [Tool.wireguardGo, .wg, .amneziawgGo, .awg, .ifconfig, .route, .networksetup] {
             if let url = try? Shell.resolve(tool) {
                 var note = ""
                 if let attrs = try? fm.attributesOfItem(atPath: url.resolvingSymlinksInPath().path),
@@ -573,7 +576,9 @@ final class TunnelController {
                 let source = url.path.hasPrefix(Tool.bundledDir) ? " (bundled)" : ""
                 out.append("ok    \(tool.rawValue): \(url.path)\(source)\(note)")
             } else {
-                out.append("FAIL  \(tool.rawValue): not found")
+                // AmneziaWG is optional: only configs with its keys need it.
+                let optional = tool == .amneziawgGo || tool == .awg
+                out.append("\(optional ? "info" : "FAIL")  \(tool.rawValue): not found\(optional ? " (needed only for AmneziaWG tunnels)" : "")")
             }
         }
         let tracked = Set(tunnels.values.map(\.utun))
@@ -581,7 +586,8 @@ final class TunnelController {
             let alive = fm.fileExists(atPath: uapiSocket(s.utun))
             out.append("\(alive ? "ok  " : "FAIL")  tunnel \(s.name) on \(s.utun)\(alive ? "" : " (control socket missing)")")
         }
-        let socks = ((try? fm.contentsOfDirectory(atPath: Self.runDir)) ?? []).filter { $0.hasSuffix(".sock") }
+        let socks = [Self.runDir, Engine.amneziaRunDir].flatMap { (try? fm.contentsOfDirectory(atPath: $0)) ?? [] }
+            .filter { $0.hasSuffix(".sock") }
         for sock in socks.sorted() {
             let utun = String(sock.dropLast(5))
             if !tracked.contains(utun) {
@@ -596,8 +602,9 @@ final class TunnelController {
 
     func status() -> [TunnelStatus] {
         tunnels.values.sorted { $0.name < $1.name }.map { s in
-            let dump = (try? Shell.run(.wg, ["show", s.utun, "dump"]))?.stdout ?? ""
-            return TunnelStatus(name: s.name, interface: s.utun, peers: WGDump.parsePeers(dump))
+            let dump = (try? Shell.run(Engine.ctl(s.utun), ["show", s.utun, "dump"]))?.stdout ?? ""
+            return TunnelStatus(name: s.name, interface: s.utun, peers: WGDump.parsePeers(dump),
+                                engine: Engine.isAmnezia(s.utun) ? "amneziawg" : "wireguard")
         }
     }
 

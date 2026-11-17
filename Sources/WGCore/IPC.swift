@@ -15,10 +15,13 @@ public struct UpOptions: Codable, Equatable, Sendable {
     public var blockIPv6: Bool
     /// Multi-hop: reach this tunnel's server through the named tunnel, which must already be up.
     public var via: String?
+    /// Run on AmneziaWG even without obfuscation keys (it also speaks plain WireGuard).
+    public var amnezia: Bool
 
     public init(splitDNSDomains: [String] = [], excludedCIDRs: [String] = [], killSwitch: Bool = false,
-                blockIPv6: Bool = false, via: String? = nil) {
+                blockIPv6: Bool = false, via: String? = nil, amnezia: Bool = false) {
         self.via = via
+        self.amnezia = amnezia
         self.splitDNSDomains = splitDNSDomains
         self.excludedCIDRs = excludedCIDRs
         self.killSwitch = killSwitch
@@ -33,6 +36,7 @@ public struct UpOptions: Codable, Equatable, Sendable {
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
         blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
         via = try c.decodeIfPresent(String.self, forKey: .via)
+        amnezia = try c.decodeIfPresent(Bool.self, forKey: .amnezia) ?? false
     }
 
     /// Returns a description of the first invalid entry, or nil.
@@ -81,9 +85,11 @@ public struct TunnelStatus: Codable, Equatable, Sendable {
     public var name: String
     public var interface: String
     public var peers: [PeerStatus]
+    /// "wireguard" or "amneziawg"; nil from older helpers.
+    public var engine: String?
 
-    public init(name: String, interface: String, peers: [PeerStatus]) {
-        self.name = name; self.interface = interface; self.peers = peers
+    public init(name: String, interface: String, peers: [PeerStatus], engine: String? = nil) {
+        self.name = name; self.interface = interface; self.peers = peers; self.engine = engine
     }
 }
 

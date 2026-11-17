@@ -45,3 +45,23 @@ final class ConfigLintTests: XCTestCase {
         XCTAssertNotEqual(WGKey.generatePrivate(), k)
     }
 }
+
+final class AmneziaConfigTests: XCTestCase {
+    let base = "[Interface]\nPrivateKey = aJZAOjSd91Y8ZUTmknBlNoqDd/yEMhr6u+lNsOSQ7Xo=\nAddress = 10.0.0.2/32\n"
+    let peer = "[Peer]\nPublicKey = hmSEV1i3X4AQyQpOeoMwt2DQEa+0nu5ZS3v5JSSrYFQ=\nAllowedIPs = 0.0.0.0/0\n"
+
+    func testParsesAndRoundTrips() throws {
+        let cfg = try WGConfig(parsing: base + "Jc = 4\nJmin = 40\nJmax = 70\nS1 = 0\nH1 = 100-200\nI1 = <b 0x0a0b><r 16>\n" + peer)
+        XCTAssertTrue(cfg.interface.isAmnezia)
+        XCTAssertEqual(cfg.interface.amnezia["H1"], "100-200")
+        XCTAssertEqual(try WGConfig(parsing: cfg.wgQuickText()), cfg)
+        XCTAssertTrue(cfg.wgSetconfText().contains("Jc = 4"))
+    }
+
+    func testRejectsBadValues() {
+        XCTAssertThrowsError(try WGConfig(parsing: base + "Jc = lots\n" + peer))
+        XCTAssertThrowsError(try WGConfig(parsing: base + "I1 = <b 0x0a>\nPostUp = x\n" + peer))
+        XCTAssertThrowsError(try WGConfig(parsing: base + "I1 = a=b\n" + peer))
+        XCTAssertFalse(try WGConfig(parsing: base + peer).interface.isAmnezia)
+    }
+}

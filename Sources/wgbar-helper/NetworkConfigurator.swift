@@ -86,7 +86,7 @@ enum NetworkConfigurator {
 
     /// Endpoint IPs as resolved by wg (`wg show <if> endpoints`).
     static func resolvedEndpointIPs(utun: String) -> [String] {
-        guard let r = try? Shell.run(.wg, ["show", utun, "endpoints"]) else { return [] }
+        guard let r = try? Shell.run(Engine.ctl(utun), ["show", utun, "endpoints"]) else { return [] }
         return r.stdout.split(separator: "\n").compactMap { line in
             let f = line.split(separator: "\t")
             guard f.count == 2, f[1] != "(none)" else { return nil }

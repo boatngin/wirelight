@@ -18,6 +18,8 @@ struct ConfigDraft: Equatable {
     var searchDomains = ""
     var mtu = ""
     var listenPort = ""
+    /// AmneziaWG keys as "Key = value" lines; kept verbatim so the form never drops them.
+    var amnezia = ""
     var peers = [Peer()]
 
     init() {}
@@ -29,6 +31,7 @@ struct ConfigDraft: Equatable {
         searchDomains = c.interface.dnsSearch.joined(separator: ", ")
         mtu = c.interface.mtu.map(String.init) ?? ""
         listenPort = c.interface.listenPort.map(String.init) ?? ""
+        amnezia = c.interface.amneziaLines.joined(separator: "\n")
         peers = c.peers.map {
             Peer(publicKey: $0.publicKey, presharedKey: $0.presharedKey ?? "", endpoint: $0.endpoint ?? "",
                  allowedIPs: $0.allowedIPs.joined(separator: ", "),
@@ -45,6 +48,7 @@ struct ConfigDraft: Equatable {
             .filter { !$0.isEmpty }.joined(separator: ", ")
         var out = ["[Interface]"] + [line("PrivateKey", privateKey), line("Address", addresses), line("DNS", dns),
                                      line("MTU", mtu), line("ListenPort", listenPort)].compactMap { $0 }
+            + amnezia.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         for p in peers {
             out += ["", "[Peer]"] + [line("PublicKey", p.publicKey), line("PresharedKey", p.presharedKey),
                                      line("Endpoint", p.endpoint), line("AllowedIPs", p.allowedIPs),
@@ -218,6 +222,18 @@ struct TunnelBuilderView: View {
                     field("MTU", "1420", $draft.mtu)
                     field("Listen port", "auto", $draft.listenPort, labelWidth: 80)
                 }
+                DisclosureGroup(draft.amnezia.isEmpty ? "AmneziaWG obfuscation" : "AmneziaWG obfuscation (on)") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextEditor(text: $draft.amnezia)
+                            .font(.system(size: 12, design: .monospaced))
+                            .frame(height: 90)
+                            .card(radius: 6)
+                        Text("Paste Jc, Jmin, Jmax, S1–S4, H1–H4 and I1–I5 exactly as the server has them, one per line. With these the tunnel runs on AmneziaWG.")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+                .font(.system(size: 12))
             }
             ForEach($draft.peers) { $peer in
                 section(draft.peers.count > 1 ? "Server \(index(of: peer) + 1)" : "Server", icon: "server.rack",
