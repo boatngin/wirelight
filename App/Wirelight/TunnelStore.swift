@@ -77,7 +77,7 @@ enum StoreError: Error, CustomStringConvertible {
         switch self {
         case let .helper(m): return m
         case let .missingConfig(n): return "No saved config for '\(n)' in Keychain"
-        case .invalidName: return "Name must be 1–15 characters: letters, digits, _ or -"
+        case .invalidName: return "Name must be 1–32 characters: letters, digits, _ or -"
         case let .duplicateName(n): return "A tunnel named '\(n)' already exists"
         case let .activeTunnel(n): return "Disconnect '\(n)' before renaming it"
         }
@@ -99,6 +99,21 @@ final class TunnelStore: ObservableObject {
     @Published var mainSection: SidebarItem? = .all
     /// Tunnel selected in the dashboard list.
     @Published var mainSelection: String?
+    /// Tunnel open in the builder; nil while creating a new one.
+    @Published var builderTarget: String?
+    /// Config text (and suggested name) handed to the builder, e.g. from Import.
+    var builderSeed: String?
+    var builderSeedName: String?
+    /// Bumped on every `openBuilder` so the builder view starts fresh.
+    @Published private(set) var builderSession = 0
+
+    func openBuilder(edit name: String? = nil, seed: String? = nil, seedName: String? = nil) {
+        builderTarget = name
+        builderSeed = seed
+        builderSeedName = seedName
+        builderSession += 1
+        mainSection = .create
+    }
     /// Parsed configs cached from the Keychain (avoid reading it on every render).
     @Published private(set) var configs: [String: WGConfig] = [:]
     /// Main window open → poll as fast as when the menu is open.
@@ -382,7 +397,7 @@ final class TunnelStore: ObservableObject {
         await reconnectIfActive(name)
     }
 
-    private func reconnectIfActive(_ name: String) async {
+    func reconnectIfActive(_ name: String) async {
         guard isActive(name) else { return }
         await disconnect(name)
         await connect(name)
@@ -413,7 +428,7 @@ final class TunnelStore: ObservableObject {
         var n = 2
         while n < 1000 {
             let suffix = "-\(n)"
-            let candidate = String(name.prefix(15 - suffix.count)) + suffix
+            let candidate = String(name.prefix(32 - suffix.count)) + suffix
             guard Validation.isValidTunnelName(candidate), profile(candidate) == nil else { n += 1; continue }
             do {
                 try importConfig(name: candidate, text: text)
@@ -711,6 +726,10 @@ final class TunnelStore: ObservableObject {
         profiles[0].excludedCIDRs = ["192.168.1.50/32"]
         selectedName = "home"
         mainSelection = "home"
+        // WIRELIGHT_DEMO_SECTION=create (etc.) opens that dashboard page for screenshots.
+        if let page = ProcessInfo.processInfo.environment["WIRELIGHT_DEMO_SECTION"].flatMap(SidebarItem.init) {
+            mainSection = page
+        }
         let now = Date()
         let demoSamples: [TrafficSample] = (0..<30).map { i in
             let t = Double(i)
