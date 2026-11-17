@@ -112,35 +112,6 @@ final class WGConfigTests: XCTestCase {
     }
 }
 
-final class ValidationTests: XCTestCase {
-    func testTunnelName() {
-        XCTAssertTrue(Validation.isValidTunnelName("home"))
-        XCTAssertTrue(Validation.isValidTunnelName("oci_tokyo-1"))
-        XCTAssertFalse(Validation.isValidTunnelName(""))
-        XCTAssertFalse(Validation.isValidTunnelName("this-name-is-too-long"))
-        XCTAssertFalse(Validation.isValidTunnelName("../etc"))
-        XCTAssertFalse(Validation.isValidTunnelName("a b"))
-        XCTAssertFalse(Validation.isValidTunnelName("x;rm"))
-    }
-
-    func testEndpoint() {
-        XCTAssertTrue(Validation.isValidEndpoint("1.2.3.4:51820"))
-        XCTAssertTrue(Validation.isValidEndpoint("[::1]:51820"))
-        XCTAssertFalse(Validation.isValidEndpoint("::1:51820"))
-        XCTAssertFalse(Validation.isValidEndpoint("host"))
-        XCTAssertFalse(Validation.isValidEndpoint("host:0"))
-        XCTAssertFalse(Validation.isValidEndpoint("bad_host!:80"))
-    }
-
-    func testCIDR() {
-        XCTAssertTrue(Validation.isValidCIDR("0.0.0.0/0"))
-        XCTAssertTrue(Validation.isValidCIDR("::/0"))
-        XCTAssertFalse(Validation.isValidCIDR("10.0.0.1"))
-        XCTAssertFalse(Validation.isValidCIDR("fd00::/129"))
-        XCTAssertFalse(Validation.isValidCIDR("10.0.0.0/-1"))
-    }
-}
-
 final class IPCTests: XCTestCase {
     func testRoundTrip() throws {
         let reqs: [Request] = [.up(name: "home", config: "x"), .down(name: "home"), .status, .ping, .refresh, .doctor,

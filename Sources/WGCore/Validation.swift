@@ -16,11 +16,13 @@ public enum Validation {
     }
 
     public static func isValidIPv4(_ s: String) -> Bool {
+        guard !s.utf8.contains(0) else { return false }
         var addr = in_addr()
         return s.withCString { inet_pton(AF_INET, $0, &addr) } == 1
     }
 
     public static func isValidIPv6(_ s: String) -> Bool {
+        guard !s.utf8.contains(0) else { return false }
         var addr = in6_addr()
         return s.withCString { inet_pton(AF_INET6, $0, &addr) } == 1
     }
@@ -39,7 +41,7 @@ public enum Validation {
 
     public static func isValidHostname(_ s: String) -> Bool {
         let range = NSRange(s.startIndex..., in: s)
-        return hostnameRegex.firstMatch(in: s, range: range) != nil
+        return hostnameRegex.firstMatch(in: s, range: range)?.range == range
     }
 
     public static func isValidPort(_ s: String) -> Bool {
@@ -71,6 +73,6 @@ public enum Validation {
 
     public static func isValidTunnelName(_ s: String) -> Bool {
         let range = NSRange(s.startIndex..., in: s)
-        return tunnelNameRegex.firstMatch(in: s, range: range) != nil
+        return tunnelNameRegex.firstMatch(in: s, range: range)?.range == range
     }
 }
