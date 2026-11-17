@@ -6,6 +6,9 @@ options:
 packages:
   WGCore:
     path: ..
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.9.6
 targets:
   Wirelight:
     type: application
@@ -14,6 +17,8 @@ targets:
     dependencies:
       - package: WGCore
         product: WGCore
+      - package: Sparkle
+        product: Sparkle
     info:
       path: Wirelight/Info.plist
       properties:
@@ -22,6 +27,9 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.utilities
+        SUFeedURL: https://github.com/boatngin/wirelight/releases/latest/download/appcast.xml
+        # Empty unless the release build passes SPARKLE_PUBLIC_KEY; the updater stays off without it.
+        SUPublicEDKey: "$(SPARKLE_PUBLIC_KEY)"
         NSLocationUsageDescription: Wirelight reads the name of the current Wi-Fi network to connect or disconnect tunnels automatically (on demand). The name is only used on this Mac and never leaves it.
     configFiles:
       Debug: Config/Signing.xcconfig

@@ -55,15 +55,9 @@
 
 ## Install
 
-### 1. Install the WireGuard tools
+### 1. Install Wirelight
 
-Wirelight uses the official userspace tools. The Homebrew cask in step 2 installs them for you; to install them manually, use [Homebrew](https://brew.sh):
-
-```bash
-brew install wireguard-tools wireguard-go
-```
-
-### 2. Install Wirelight
+The package includes `wg` and `wireguard-go`, built from pinned upstream sources. Nothing else to install.
 
 With [Homebrew](https://brew.sh):
 
@@ -84,7 +78,7 @@ Or manually:
 > Builds aren't notarized yet. If macOS blocks the installer, right-click it and choose **Open**, or click **Open Anyway** in **System Settings › Privacy & Security**.
 > You can verify the download first: `shasum -a 256 -c Wirelight-<version>.pkg.sha256`
 
-### 3. Add a tunnel
+### 2. Add a tunnel
 
 1. Open **Wirelight**. The ping icon appears in the menu bar.
 2. Choose **Import** and drop in a `.conf` file, for example one exported from OPNsense, pfSense or your VPS.

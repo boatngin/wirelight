@@ -17,6 +17,7 @@ launchctl bootout system/"$LABEL" 2>/dev/null || true
 launchctl bootout system/com.thanaboat.wgbar.helper 2>/dev/null || true  # installs from before the rename
 rm -f /Library/LaunchDaemons/com.thanaboat.wgbar.helper.plist
 rm -f "/Library/LaunchDaemons/$LABEL.plist" /Library/PrivilegedHelperTools/wgbar-helper
+rm -rf /Library/PrivilegedHelperTools/wirelight-tools
 rm -f /usr/local/bin/wgbarctl /var/run/wgbar.sock /var/log/wgbar-helper.log
 rm -rf "/Library/Application Support/WGBar" /Applications/Wirelight.app
 for f in /etc/resolver/*; do

@@ -26,3 +26,27 @@ final class PlaceTests: XCTestCase {
         XCTAssertNil(ProxyState(ProxySetting(mode: .off)).web)
     }
 }
+
+final class CallerCheckTests: XCTestCase {
+    func testIdentifiers() {
+        XCTAssertTrue(CallerCheck.isAllowedIdentifier("io.github.boatngin.wirelight"))
+        XCTAssertTrue(CallerCheck.isAllowedIdentifier("wgbarctl-5555494416415a581b0b393b869899826ef1dfec"))
+        XCTAssertFalse(CallerCheck.isAllowedIdentifier("com.apple.Terminal"))
+        XCTAssertFalse(CallerCheck.isAllowedIdentifier("io.github.boatngin.wirelight.evil"))
+    }
+
+    func testRootOnlyPaths() {
+        XCTAssertTrue(CallerCheck.isRootOnly("/usr/bin/true", walkUp: true))
+        XCTAssertFalse(CallerCheck.isRootOnly(NSTemporaryDirectory(), walkUp: true))
+        XCTAssertFalse(CallerCheck.isRootOnly("/nonexistent/x"))
+    }
+}
+
+final class CallerCheckInstallTests: XCTestCase {
+    func testInstalledLocationsPass() throws {
+        // /Applications is root:admin 775 on every Mac.
+        XCTAssertTrue(CallerCheck.isRootOnly("/Applications"))
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: "/Applications/Wirelight.app"))
+        XCTAssertTrue(CallerCheck.isRootOnly("/Applications/Wirelight.app", walkUp: true))
+    }
+}

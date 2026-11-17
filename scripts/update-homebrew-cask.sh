@@ -32,7 +32,6 @@ cask "wirelight" do
   license "MIT"
 
   depends_on macos: ">= :ventura"
-  depends_on formula: ["wireguard-tools", "wireguard-go"]
 
   pkg "Wirelight-#{version}.pkg"
 

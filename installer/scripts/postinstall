@@ -16,8 +16,7 @@ for _ in 1 2 3 4 5 6 7 8; do
 done
 launchctl bootstrap system "$PLIST"
 
-# WireGuard userspace tools are required but not bundled (see README).
-if [[ ! -x /opt/homebrew/bin/wireguard-go && ! -x /usr/local/bin/wireguard-go ]]; then
-    echo "Wirelight: wireguard-go not found. Install with: brew install wireguard-tools wireguard-go"
-fi
+# The package ships wg and wireguard-go; keep them root-only so the helper trusts them.
+chown -R root:wheel /Library/PrivilegedHelperTools/wirelight-tools 2>/dev/null || true
+chmod -R go-w /Library/PrivilegedHelperTools/wirelight-tools 2>/dev/null || true
 exit 0

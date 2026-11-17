@@ -5,5 +5,7 @@
 CODE_SIGN_STYLE = Automatic
 CODE_SIGN_IDENTITY = -
 DEVELOPMENT_TEAM =
+// Sparkle EdDSA public key (base64). Release builds pass it in; empty disables updates.
+SPARKLE_PUBLIC_KEY =
 
 #include? "Local.xcconfig"
