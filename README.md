@@ -41,7 +41,8 @@
 - **Split tunnel exclusions**: keep chosen CIDRs off the tunnel, even when routing all traffic.
 - **Route all traffic**: full-tunnel mode in one click.
 - **Several tunnels at once**: run home, office and lab side by side, each with its own switch and live speed.
-- **Stays connected**: re-resolves endpoints after sleep and network changes, and warns when the handshake goes stale.
+- **Stays connected**: re-resolves endpoints after sleep, network and local IP changes, and every 2 minutes while the handshake is stale (for DDNS servers). Reconnects a tunnel that drops on its own.
+- **Heads-up when something's wrong**: "No answer from server" within 25 seconds, failed connects with a Retry button, and an IPv6 leak warning with a one-click **Block IPv6** fix.
 - **Safe by design**: keys stay in your Keychain, and the root helper rejects scripting hooks and runs only allow-listed tools. See [SECURITY.md](SECURITY.md).
 
 ## Install

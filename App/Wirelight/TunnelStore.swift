@@ -22,6 +22,8 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
     var trustedSSIDs: [String] = []
     /// Block all non-tunnel traffic if the tunnel drops unexpectedly.
     var killSwitch: Bool = false
+    /// Drop IPv6 while connected when the tunnel only takes IPv4 (stops IPv6 leaks).
+    var blockIPv6: Bool = false
     var id: String { name }
 
     init(name: String, endpoint: String?, addresses: [String], routeAll: Bool = false,
@@ -44,10 +46,12 @@ struct TunnelProfile: Codable, Identifiable, Equatable {
         onDemand = try c.decodeIfPresent(Bool.self, forKey: .onDemand) ?? false
         trustedSSIDs = try c.decodeIfPresent([String].self, forKey: .trustedSSIDs) ?? []
         killSwitch = try c.decodeIfPresent(Bool.self, forKey: .killSwitch) ?? false
+        blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
     }
 
     var upOptions: UpOptions {
-        UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs, killSwitch: killSwitch)
+        UpOptions(splitDNSDomains: splitDNSDomains, excludedCIDRs: excludedCIDRs, killSwitch: killSwitch,
+                  blockIPv6: blockIPv6)
     }
 }
 
@@ -202,7 +206,10 @@ final class TunnelStore: ObservableObject {
             }
         }
         pathMonitor.pathUpdateHandler = { [weak self] path in
+            // Local addresses are part of the signature, so a DHCP renewal that hands
+            // out a new IP on the same network still triggers a refresh.
             let sig = "\(path.status)|" + path.availableInterfaces.map(\.name).joined(separator: ",")
+                + "|" + LocalAddresses.current().joined(separator: ",")
             Task { @MainActor in
                 guard let self else { return }
                 defer { self.lastPathSignature = sig }
@@ -240,7 +247,7 @@ final class TunnelStore: ObservableObject {
     var iconState: IconState {
         if busy { return .connecting(frame: iconFrame) }
         guard isConnected else { return .disconnected }
-        return statuses.keys.contains(where: isStale) ? .stale : .connected
+        return statuses.keys.contains(where: { isStale($0) || isSilent($0) }) ? .stale : .connected
     }
 
     private func startIconAnimation() {
@@ -296,13 +303,57 @@ final class TunnelStore: ObservableObject {
 
     private func checkHandshake() {
         notifiedStale.formIntersection(statuses.keys)
+        notifiedSilent.formIntersection(statuses.keys)
         for name in statuses.keys.sorted() {
             let stale = isStale(name)
             if stale && !notifiedStale.contains(name) {
                 notify("Handshake lost", "\(name): no handshake for over 3 minutes")
             }
             if stale { notifiedStale.insert(name) } else { notifiedStale.remove(name) }
+            if isSilent(name) && !notifiedSilent.contains(name) {
+                notifiedSilent.insert(name)
+                notify("No answer from server", "\(name): data goes out but nothing comes back")
+                addLog("\(name): no answer from the server after \(Int(Self.silentAfter))s", isError: true)
+            }
         }
+        // A stale handshake may mean the server's address changed (DDNS): re-resolve now and then.
+        if statuses.keys.contains(where: isStale), Date().timeIntervalSince(lastStaleRefresh) > 120 {
+            lastStaleRefresh = Date()
+            Task { await helperRefresh(reason: "stale handshake") }
+        }
+    }
+
+    // MARK: Health
+
+    static let silentAfter: TimeInterval = 25
+    private var notifiedSilent: Set<String> = []
+    private var lastStaleRefresh = Date.distantPast
+    /// Tunnels we are taking down on purpose, so their disappearance isn't a "lost" connection.
+    private var expectedDown: Set<String> = []
+    /// Tunnels that vanished without a disconnect (helper restart, wireguard-go crash).
+    @Published private(set) var lost: Set<String> = []
+    /// Last connect error per tunnel, cleared on success.
+    @Published private(set) var failures: [String: String] = [:]
+
+    /// Up for a while, has sent data, and never got a byte or a handshake back.
+    func isSilent(_ name: String) -> Bool {
+        guard let since = since[name], Date().timeIntervalSince(since) >= Self.silentAfter,
+              let peer = statuses[name]?.peers.first else { return false }
+        return peer.latestHandshake == nil && peer.rxBytes == 0 && peer.txBytes > 0
+    }
+
+    /// The tunnel takes all IPv4, not IPv6, and this Mac has a public IPv6 address:
+    /// IPv6 traffic goes around the tunnel.
+    func leaksIPv6(_ name: String) -> Bool {
+        guard let p = profile(name), !p.routeAll, !p.blockIPv6 else { return false }
+        let ips = config(name)?.peers.flatMap(\.allowedIPs) ?? []
+        return ips.contains("0.0.0.0/0") && !ips.contains("::/0") && LocalAddresses.hasGlobalIPv6()
+    }
+
+    func dismissFailure(_ name: String) { failures[name] = nil; lost.remove(name) }
+
+    func setBlockIPv6(_ on: Bool, for name: String) async {
+        await updateProfile(name) { $0.blockIPv6 = on }
     }
 
     // MARK: Connect / disconnect
@@ -341,27 +392,30 @@ final class TunnelStore: ObservableObject {
                 text = cfg.wgQuickText()
             }
             let options = profile(name)?.upOptions ?? UpOptions()
-            let request: Request = (options.splitDNSDomains.isEmpty && options.excludedCIDRs.isEmpty && !options.killSwitch)
-                ? .up(name: name, config: text)
-                : .upWithOptions(name: name, config: text, options: options)
-            let r = try check(await HelperClient.send(request, timeout: 30))
+            let r = try check(await HelperClient.send(.upWithOptions(name: name, config: text, options: options), timeout: 30))
             apply(r.status)
+            failures[name] = nil
+            lost.remove(name)
             selectedName = name
             notifiedStale.remove(name)
+            notifiedSilent.remove(name)
             notify("Connected", name)
             addLog("Connected \(name)")
         } catch {
-            lastError = String(describing: error)
-            addLog(String(describing: error), isError: true)
+            failures[name] = String(describing: error)
+            addLog("\(name): \(error)", isError: true)
         }
     }
 
     func disconnect(_ name: String) async {
         if Self.isDemo { return }
+        failures[name] = nil
+        lost.remove(name)
         guard !isBusy(name), isActive(name) else { return }
         busyNames.insert(name)
+        expectedDown.insert(name)
         lastError = nil
-        defer { busyNames.remove(name) }
+        defer { busyNames.remove(name); expectedDown.remove(name) }
         do {
             let r = try check(await HelperClient.send(.down(name: name), timeout: 30))
             apply(r.status)
@@ -671,12 +725,25 @@ final class TunnelStore: ObservableObject {
         if log.count > 500 { log.removeFirst(log.count - 500) }
     }
 
+    /// A tunnel dropped without being asked to: say so, then try once to bring it back.
+    private func connectionLost(_ name: String) {
+        lost.insert(name)
+        notify("Connection lost", "\(name) went down. Reconnecting…")
+        addLog("\(name): connection lost, reconnecting in 5s", isError: true)
+        Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard lost.contains(name), !isActive(name) else { return }
+            await connect(name)
+        }
+    }
+
     /// Replaces the connected set with the helper's report and derives per-tunnel rates.
     private func apply(_ list: [TunnelStatus]?) {
         let now = Date()
         let next = Dictionary((list ?? []).map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
         for gone in Set(statuses.keys).subtracting(next.keys) {
             traffic[gone] = nil; since[gone] = nil; lastCounters[gone] = nil
+            if !expectedDown.contains(gone), helperReachable, profile(gone) != nil { connectionLost(gone) }
         }
         for (name, st) in next {
             if since[name] == nil { since[name] = now }
@@ -751,6 +818,7 @@ final class TunnelStore: ObservableObject {
                        rxBytes: 52_300_000, txBytes: 8_900_000, allowedIPs: ["10.20.0.0/16"])])
         traffic["office"] = demoSamples.map { TrafficSample(date: $0.date, rx: $0.rx * 0.2, tx: $0.tx * 0.3) }
         since["office"] = now.addingTimeInterval(-1800)
+        failures["tokyo-vps"] = "wireguard-go failed: control socket for utun9 did not appear"
         addLog("Imported home")
         addLog("Connected home")
         addLog("Test home: 10.8.0.1: avg 18.4 ms · 0.0% packet loss")
