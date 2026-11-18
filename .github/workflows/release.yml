@@ -26,8 +26,8 @@ jobs:
           TAG="${{ inputs.tag || github.ref_name }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install XcodeGen and Go
+        run: brew install xcodegen go
       - name: Test
         run: swift test
       - name: Build installer
