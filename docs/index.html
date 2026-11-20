@@ -14,8 +14,7 @@
 <meta name="twitter:image" content="https://boatngin.github.io/wirelight/assets/social-preview.png">
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <style>
-:root{--bg:#fafafa;--fg:#111;--muted:#666;--card:#fff;--line:rgba(0,0,0,.08);--accent:#111;--accent-fg:#fff;--code:#f1f1f1}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0b0c;--fg:#f2f2f2;--muted:#9a9a9a;--card:#151517;--line:rgba(255,255,255,.08);--accent:#fff;--accent-fg:#000;--code:#1d1d20}}
+:root{color-scheme:dark;--bg:#0b0b0c;--fg:#f2f2f2;--muted:#9a9a9a;--card:#151517;--line:rgba(255,255,255,.08);--accent:#fff;--accent-fg:#000;--code:#1d1d20}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
 main{max-width:880px;margin:0 auto;padding:56px 16px 80px}
@@ -44,9 +43,16 @@ pre{background:var(--code);padding:12px 14px;border-radius:10px;overflow-x:auto}
 pre code{background:none;padding:0}
 footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);margin-top:56px;padding-top:20px}
 a{color:inherit}
+.bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;display:flex;flex-direction:column;justify-content:space-around;opacity:.12;font:800 clamp(48px,9vw,120px)/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.03em;color:var(--fg);-webkit-mask:radial-gradient(ellipse at center,#000 45%,transparent 100%);mask:radial-gradient(ellipse at center,#000 45%,transparent 100%)}
+.bg div{white-space:nowrap;width:max-content;animation:slide 60s linear infinite}
+.bg div:nth-child(even){animation-direction:reverse;-webkit-text-stroke:1.5px var(--fg);color:transparent}
+.bg div:nth-child(3n){animation-duration:90s}
+@keyframes slide{to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.bg div{animation:none}}
 </style>
 </head>
 <body>
+<div class="bg" aria-hidden="true"><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div><div>Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight Wirelight </div></div>
 <main>
   <section class="hero">
     <img src="assets/icon.png" alt="Wirelight icon">
