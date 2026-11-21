@@ -14,12 +14,12 @@ jobs:
   greet:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/first-interaction@v1
+      - uses: actions/first-interaction@v3
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          issue-message: |
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_message: |
             Thanks for opening your first issue in Wirelight! 🎉 A maintainer will take a look soon.
             If you'd like to work on it yourself, say so here. [CONTRIBUTING.md](https://github.com/boatngin/wirelight/blob/main/CONTRIBUTING.md) explains how to get set up.
-          pr-message: |
+          pr_message: |
             Thanks for your first pull request to Wirelight! 🎉 CI will run shortly and a maintainer will review it.
             While you wait, please check the PR template boxes. Questions are welcome in [Discussions](https://github.com/boatngin/wirelight/discussions).
