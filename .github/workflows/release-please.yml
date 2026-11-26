@@ -16,7 +16,7 @@ jobs:
       tag: ${{ steps.rp.outputs.tag_name }}
     steps:
       - id: rp
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
 
   # Tags pushed with GITHUB_TOKEN don't trigger other workflows, so call the build directly.
   build:
