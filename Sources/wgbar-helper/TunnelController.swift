@@ -676,12 +676,13 @@ final class TunnelController {
             NetworkConfigurator.deleteRoute(r)
         }
         state.routes.removeAll { $0.interface == state.utun && old.contains($0.destination) && !wanted.contains($0.destination) }
+        // Record the new set first so a failure midway is still undone by the next call.
+        state.dynamicRoutes = wanted
+        defer { save(state) }
         for c in wanted where !old.contains(c) {
             let fam = NetworkConfigurator.family(of: String(c.split(separator: "/")[0]))
             try addRoute(RouteEntry(family: fam, destination: c, interface: state.utun), state: &state)
         }
-        state.dynamicRoutes = wanted
-        save(state)
         log("\(name): \(wanted.count) learned route(s)")
     }
 }
