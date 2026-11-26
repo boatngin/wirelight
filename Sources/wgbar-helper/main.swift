@@ -44,10 +44,7 @@ func handle(_ request: Request, uid: uid_t, isAdmin: Bool) -> Response {
             guard request.allowedForStandardUsers else { return .failure("permission denied: needs an administrator") }
             // Standard users may only touch shared tunnels, and only as the admin allowed.
             switch request {
-            case let .setDynamicRoutes(name, cidrs):
-            try controller.setDynamicRoutes(name, cidrs)
-            return Response(ok: true, status: controller.status())
-        case let .upShared(name):
+            case let .upShared(name):
                 guard SharedStore.load(name)?.policy.usersCanConnect == true else {
                     return .failure("permission denied: an administrator hasn't allowed connecting '\(name)'")
                 }
