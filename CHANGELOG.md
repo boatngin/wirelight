@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/boatngin/wirelight/compare/v0.4.0...v0.4.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **helper:** learned-routes permission case and partial-failure save ([#53](https://github.com/boatngin/wirelight/issues/53)) ([03546b4](https://github.com/boatngin/wirelight/commit/03546b4910110546bdf3b9643dc73d1551df5805))
+
 ## [0.4.0](https://github.com/boatngin/wirelight/compare/v0.3.0...v0.4.0) (2026-11-22)
 
 
