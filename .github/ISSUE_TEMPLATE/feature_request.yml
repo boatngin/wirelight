@@ -2,6 +2,11 @@ name: Feature request
 description: Suggest an idea or improvement
 labels: [enhancement, needs-triage]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Search [open feature requests](https://github.com/boatngin/wirelight/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc) first. If yours is there, add a 👍 to it: we sort the roadmap by votes.
+        Not sure yet? Start in [Discussions › Ideas](https://github.com/boatngin/wirelight/discussions/categories/ideas).
   - type: textarea
     id: problem
     attributes:

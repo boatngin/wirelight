@@ -1,0 +1,38 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas start here. Others can upvote and comment, and popular ideas become issues on the roadmap.
+        Search first: if someone already posted your idea, upvote it instead of opening a new one.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      placeholder: When I switch Wi-Fi networks I have to …
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: Sketches and screenshots of other apps are welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Menu bar and dashboard
+        - Tunnels and routing
+        - DNS
+        - Install and updates
+        - Command line
+        - Other
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to help build this

@@ -183,7 +183,9 @@ Planned work lives in [issues](https://github.com/boatngin/wirelight/issues). Hi
 
 Want to help? Browse [`help wanted`](https://github.com/boatngin/wirelight/labels/help%20wanted) for bigger features or [`good first issue`](https://github.com/boatngin/wirelight/labels/good%20first%20issue) for a gentle start.
 
-Got an idea? Share it in [Discussions › Ideas](https://github.com/boatngin/wirelight/discussions/categories/ideas).
+Vote for what gets built next: add a 👍 to the [most-wanted features](https://github.com/boatngin/wirelight/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc). We work on the top ones first.
+
+Got an idea? Share it in [Discussions › Ideas](https://github.com/boatngin/wirelight/discussions/categories/ideas) or answer a [poll](https://github.com/boatngin/wirelight/discussions/categories/polls).
 
 ## Development
 
