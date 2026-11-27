@@ -89,6 +89,12 @@ cd App && xcodegen generate && open Wirelight.xcodeproj
 
 อ่านวิธีร่วมพัฒนาที่ [CONTRIBUTING.md](CONTRIBUTING.md)
 
+## ร่วมโหวตและเสนอไอเดีย
+
+- โหวตฟีเจอร์ที่อยากได้ด้วยการกด 👍 ใน[รายการฟีเจอร์ที่คนอยากได้มากที่สุด](https://github.com/boatngin/wirelight/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc) เราทำอันที่ได้โหวตมากก่อน
+- มีไอเดียใหม่? โพสต์ใน [Discussions › Ideas](https://github.com/boatngin/wirelight/discussions/categories/ideas) หรือร่วมตอบ[โพล](https://github.com/boatngin/wirelight/discussions/categories/polls)
+- อยากลองเขียนโค้ด? เริ่มจาก [`good first issue`](https://github.com/boatngin/wirelight/labels/good%20first%20issue) หรือ [`help wanted`](https://github.com/boatngin/wirelight/labels/help%20wanted)
+
 ## License
 
 [MIT](LICENSE) ดูเรื่องเครื่องหมายการค้าและซอฟต์แวร์ของบุคคลที่สามใน [NOTICE.md](NOTICE.md)

@@ -1,8 +1,14 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Vote on features
+    url: https://github.com/boatngin/wirelight/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement+sort%3Areactions-%2B1-desc
+    about: Add a 👍 to the requests you want most. We build the top ones first.
+  - name: Share an idea
+    url: https://github.com/boatngin/wirelight/discussions/categories/ideas
+    about: Not a full feature request yet? Post it in Ideas and let others upvote it.
   - name: Report a security vulnerability
     url: https://github.com/boatngin/wirelight/security/advisories/new
     about: Please report security issues privately.
   - name: Ask a question
-    url: https://github.com/boatngin/wirelight/discussions
-    about: Questions and ideas are welcome in Discussions.
+    url: https://github.com/boatngin/wirelight/discussions/categories/q-a
+    about: Ask in Discussions › Q&A.
